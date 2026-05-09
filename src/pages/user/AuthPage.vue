@@ -32,6 +32,7 @@ watch(
 )
 
 function switchMode(target: 'login' | 'register') {
+  loginTab.value = 'email'
   mode.value = target
   router.replace({ name: target })
 }
@@ -246,6 +247,10 @@ function startTyping() {
   }
 
   const line = script[lineIndex]
+  if (!line) {
+    resetTyping()
+    return
+  }
   const plainText = line.text.replace(/<[^>]*>/g, '')
 
   if (charIndex <= plainText.length) {
@@ -390,8 +395,8 @@ onUnmounted(() => {
               <!-- Login form -->
               <Transition name="form-swap" mode="out-in">
                 <div v-if="mode === 'login'" key="login-form">
-                  <a-form layout="vertical" @finish="handleEmailLogin">
-                    <a-form-item>
+                  <a-form :model="loginForm" layout="vertical" @finish="handleEmailLogin" @submit.prevent="handleEmailLogin">
+                    <a-form-item name="email">
                       <a-input
                         v-model:value="loginForm.email"
                         placeholder="请输入邮箱"
@@ -399,7 +404,7 @@ onUnmounted(() => {
                         :prefix="h(MailOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="password">
                       <a-input-password
                         v-model:value="loginForm.password"
                         placeholder="请输入密码"
@@ -429,8 +434,8 @@ onUnmounted(() => {
 
                 <!-- Register form -->
                 <div v-else key="register-form">
-                  <a-form layout="vertical" @finish="handleRegister">
-                    <a-form-item>
+                  <a-form :model="regForm" layout="vertical" @finish="handleRegister" @submit.prevent="handleRegister">
+                    <a-form-item name="email">
                       <a-input
                         v-model:value="regForm.email"
                         placeholder="请输入邮箱"
@@ -438,7 +443,7 @@ onUnmounted(() => {
                         :prefix="h(MailOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="emailCode">
                       <a-input-search
                         v-model:value="regForm.emailCode"
                         placeholder="请输入验证码"
@@ -447,13 +452,13 @@ onUnmounted(() => {
                         @search="handleSendCode"
                       >
                         <template #enterButton>
-                          <a-button :disabled="countdown > 0" class="code-btn">
+                          <a-button :disabled="countdown > 0" class="code-btn" @click="handleSendCode">
                             {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
                           </a-button>
                         </template>
                       </a-input-search>
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="password">
                       <a-input-password
                         v-model:value="regForm.password"
                         placeholder="请输入密码（至少6位）"
@@ -461,7 +466,7 @@ onUnmounted(() => {
                         :prefix="h(LockOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="confirmPassword">
                       <a-input-password
                         v-model:value="regForm.confirmPassword"
                         placeholder="请确认密码"
@@ -469,7 +474,7 @@ onUnmounted(() => {
                         :prefix="h(LockOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="inviteCode">
                       <a-input
                         v-model:value="regForm.inviteCode"
                         placeholder="请输入邀请码"

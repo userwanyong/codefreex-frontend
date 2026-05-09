@@ -164,7 +164,7 @@ onMounted(() => loadApps())
                 size="small"
                 danger
                 class="action-btn"
-                @click="handleDelete(app.id, $event)"
+                @click="app.id && handleDelete(app.id, $event)"
               >
                 <DeleteOutlined />
               </a-button>
