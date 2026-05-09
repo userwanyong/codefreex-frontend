@@ -38,9 +38,9 @@ const navItems = computed(() => {
 })
 
 const adminItems = [
-  { key: 'adminapps', label: '应用管理', path: '/admin/apps' },
+  { key: 'adminapps', label: '应用管理', path: '/admin/app' },
   { key: 'admininvites', label: '邀请码管理', path: '/admin/invites' },
-  { key: 'adminredeems', label: '兑换码管理', path: '/admin/redeems' },
+  { key: 'adminredeems', label: '兑换码管理', path: '/admin/redeem' },
 ]
 
 const activeKey = computed(() => route.name as string)

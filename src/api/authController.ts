@@ -23,9 +23,16 @@ export async function register(body: {
 
 /** 邮箱登录 */
 export async function loginByEmail(email: string, password: string) {
+  const body = new URLSearchParams()
+  body.set('email', email)
+  body.set('password', password)
+
   return request<API.BaseResponse<API.TokenResponse>>('/auth/login/email', {
     method: 'POST',
-    params: { email, password },
+    data: body,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
   })
 }
 

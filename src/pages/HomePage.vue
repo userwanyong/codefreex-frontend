@@ -6,6 +6,7 @@ import { getFeaturedApps, createApp } from '@/api/appController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
 import { message } from 'ant-design-vue'
+import FlowBackground from '@/components/FlowBackground.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -107,6 +108,7 @@ onMounted(() => loadApps())
 
 <template>
   <div class="home-page">
+    <FlowBackground />
     <!-- Hero Section -->
     <section class="hero">
       <!-- Ambient glow -->
@@ -243,6 +245,7 @@ onMounted(() => loadApps())
 
 <style scoped>
 .home-page {
+  position: relative;
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -252,6 +255,7 @@ onMounted(() => loadApps())
    ============================================ */
 .hero {
   position: relative;
+  z-index: 1;
   text-align: center;
   padding: var(--space-16) 0 var(--space-12);
   overflow: hidden;
@@ -421,6 +425,8 @@ onMounted(() => loadApps())
    Features
    ============================================ */
 .features-section {
+  position: relative;
+  z-index: 1;
   padding: var(--space-12) 0;
 }
 
@@ -477,6 +483,8 @@ onMounted(() => loadApps())
    Apps Grid
    ============================================ */
 .apps-section {
+  position: relative;
+  z-index: 1;
   padding: var(--space-8) 0 var(--space-16);
 }
 

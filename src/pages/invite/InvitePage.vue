@@ -13,11 +13,20 @@ const inviter = ref<API.UserInfo | null>(null)
 const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const generateModalVisible = ref(false)
+const generateLoading = ref(false)
+const generateForm = ref({
+  batch: '',
+  expireHours: 168,
+  maxUseCount: 1,
+})
 
 const statusMap: Record<string, { text: string; color: string }> = {
-  active: { text: '可用', color: 'success' },
+  unused: { text: '未使用', color: 'success' },
+  partial: { text: '部分使用', color: 'processing' },
   used: { text: '已使用', color: 'default' },
   expired: { text: '已过期', color: 'error' },
+  disabled: { text: '已禁用', color: 'error' },
 }
 
 async function loadInvites() {
@@ -48,16 +57,24 @@ async function loadInviter() {
 }
 
 async function handleGenerate() {
+  generateLoading.value = true
   try {
-    const res = await generateInvite({})
+    const res = await generateInvite({
+      batch: generateForm.value.batch || undefined,
+      expireHours: generateForm.value.expireHours,
+      maxUseCount: generateForm.value.maxUseCount,
+    })
     if (res.data?.code === 0) {
       message.success('邀请码生成成功')
+      generateModalVisible.value = false
       loadInvites()
     } else {
       message.error(res.data?.message || '生成失败')
     }
   } catch {
     message.error('生成失败')
+  } finally {
+    generateLoading.value = false
   }
 }
 
@@ -82,7 +99,7 @@ onMounted(() => {
   <div class="invite-page">
     <div class="page-header">
       <h2>邀请码管理</h2>
-      <a-button type="primary" @click="handleGenerate">
+      <a-button type="primary" @click="generateModalVisible = true">
         <PlusOutlined /> 生成邀请码
       </a-button>
     </div>
@@ -135,6 +152,26 @@ onMounted(() => {
         @change="handlePageChange"
       />
     </div>
+
+    <a-modal
+      v-model:open="generateModalVisible"
+      title="生成邀请码"
+      :confirm-loading="generateLoading"
+      @ok="handleGenerate"
+      ok-text="生成"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="批次标识">
+          <a-input v-model:value="generateForm.batch" placeholder="可选，便于归类" />
+        </a-form-item>
+        <a-form-item label="有效期（小时）">
+          <a-input-number v-model:value="generateForm.expireHours" :min="1" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="最大使用次数">
+          <a-input-number v-model:value="generateForm.maxUseCount" :min="1" style="width: 100%" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 

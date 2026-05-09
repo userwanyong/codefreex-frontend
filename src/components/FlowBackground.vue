@@ -7,194 +7,188 @@ let animId = 0
 onMounted(() => {
   const canvas = canvasRef.value
   if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const canvasEl = canvas
+  const ctx2 = ctx
 
-  const gl = canvas.getContext('webgl')
-  if (!gl) return
+  // Code snippets pool
+  const codePool = [
+    'const app = createApp(',
+    'async function generate(',
+    'export default {',
+    'return res.data.map(',
+    'import { ref } from "vue"',
+    'await deploy(code)',
+    'if (!token) return',
+    'const users = query(',
+    'router.push("/home")',
+    'response.json()',
+    '<template>',
+    'npm run build',
+    'git push origin main',
+    'SELECT * FROM apps',
+    'docker compose up',
+    'class App extends Vue',
+    'interface User {',
+    'type Props = {',
+    'console.log(data)',
+    'catch (err) {',
+    'Promise.all(reqs)',
+    'new WebSocket(url)',
+    'fetch("/api/apps")',
+    'Math.random() * 100',
+    'JSON.parse(body)',
+    'addEventListener(',
+    'requestAnimationFrame',
+    'Object.keys(obj)',
+    'Array.from(list)',
+    'setTimeout(() => {',
+    'export type API = {',
+    'vue-router',
+    'ant-design-vue',
+    'defineComponent(',
+    'computed(() =>',
+    'watchEffect(() =>',
+    'onMounted(() =>',
+    'reactive({ name:',
+    'v-model="value"',
+    'v-for="item in"',
+  ]
 
-  // Shaders
-  const vertSrc = `
-    attribute vec2 a_position;
-    void main() {
-      gl_Position = vec4(a_position, 0.0, 1.0);
-    }
-  `
-
-  const fragSrc = `
-    precision highp float;
-    uniform vec2 u_resolution;
-    uniform float u_time;
-
-    // Simplex-style noise
-    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-    vec2 mod289v2(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-    vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
-
-    float snoise(vec2 v) {
-      const vec4 C = vec4(0.211324865405187, 0.366025403784439,
-                          -0.577350269189626, 0.024390243902439);
-      vec2 i = floor(v + dot(v, C.yy));
-      vec2 x0 = v - i + dot(i, C.xx);
-      vec2 i1;
-      i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-      vec4 x12 = x0.xyxy + C.xxzz;
-      x12.xy -= i1;
-      i = mod289v2(i);
-      vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0))
-                       + i.x + vec3(0.0, i1.x, 1.0));
-      vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy),
-                              dot(x12.zw, x12.zw)), 0.0);
-      m = m * m;
-      m = m * m;
-      vec3 x = 2.0 * fract(p * C.www) - 1.0;
-      vec3 h = abs(x) - 0.5;
-      vec3 ox = floor(x + 0.5);
-      vec3 a0 = x - ox;
-      m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
-      vec3 g;
-      g.x = a0.x * x0.x + h.x * x0.y;
-      g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-      return 130.0 * dot(m, g);
-    }
-
-    // Fractal Brownian Motion
-    float fbm(vec2 p) {
-      float f = 0.0;
-      float w = 0.5;
-      for (int i = 0; i < 5; i++) {
-        f += w * snoise(p);
-        p *= 2.0;
-        w *= 0.5;
-      }
-      return f;
-    }
-
-    void main() {
-      vec2 uv = gl_FragCoord.xy / u_resolution;
-      vec2 p = uv * 3.0;
-
-      float t = u_time * 0.15;
-
-      // Layered flow
-      float n1 = fbm(p + vec2(t * 0.3, t * 0.2));
-      float n2 = fbm(p * 1.5 + vec2(-t * 0.2, t * 0.4) + n1 * 0.5);
-      float n3 = fbm(p * 0.8 + vec2(t * 0.1, -t * 0.15) + n2 * 0.3);
-
-      // Domain warping for liquid feel
-      float warp = fbm(p + fbm(p + fbm(p + vec2(t * 0.1))));
-
-      // Combine
-      float flow = n1 * 0.3 + n2 * 0.4 + n3 * 0.3;
-      flow = flow * 0.5 + 0.5; // normalize to 0-1
-      flow = smoothstep(0.3, 0.7, flow);
-
-      // Warp intensity
-      float warpFlow = smoothstep(0.35, 0.65, warp * 0.5 + 0.5);
-
-      // Mix flow and warp
-      float final = mix(flow, warpFlow, 0.5);
-
-      // Dark base
-      vec3 bg = vec3(0.02, 0.04, 0.08);
-
-      // Green glow
-      vec3 green1 = vec3(0.05, 0.45, 0.15);
-      vec3 green2 = vec3(0.02, 0.25, 0.08);
-      vec3 cyan = vec3(0.02, 0.3, 0.35);
-
-      // Color mixing
-      vec3 col = bg;
-      col = mix(col, green2, final * 0.4);
-      col = mix(col, green1, pow(final, 2.0) * 0.3);
-      col = mix(col, cyan, pow(warpFlow, 3.0) * 0.15);
-
-      // Vignette
-      float vig = 1.0 - length((uv - 0.5) * 1.2);
-      vig = smoothstep(0.0, 0.7, vig);
-      col *= vig * 0.8 + 0.2;
-
-      // Subtle scanlines
-      float scan = sin(gl_FragCoord.y * 1.5) * 0.02 + 1.0;
-      col *= scan;
-
-      gl_FragColor = vec4(col, 1.0);
-    }
-  `
-
-  function createShader(type: number, source: string) {
-    const shader = gl!.createShader(type)!
-    gl!.shaderSource(shader, source)
-    gl!.compileShader(shader)
-    if (!gl!.getShaderParameter(shader, gl!.COMPILE_STATUS)) {
-      console.error(gl!.getShaderInfoLog(shader))
-      gl!.deleteShader(shader)
-      return null
-    }
-    return shader
+  // Column state
+  interface Column {
+    x: number
+    speed: number
+    chars: string[]
+    y: number
+    opacity: number
+    fontSize: number
+    lastCharTime: number
+    charInterval: number
   }
 
-  const vs = createShader(gl.VERTEX_SHADER, vertSrc)
-  const fs = createShader(gl.FRAGMENT_SHADER, fragSrc)
-  if (!vs || !fs) return
+  let columns: Column[] = []
+  let w = 0
+  let h = 0
+  const colWidth = 14
+  const pickSnippet = () => codePool[Math.floor(Math.random() * codePool.length)] ?? 'const code = []'
 
-  const program = gl.createProgram()!
-  gl.attachShader(program, vs)
-  gl.attachShader(program, fs)
-  gl.linkProgram(program)
-
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error(gl.getProgramInfoLog(program))
-    return
-  }
-
-  gl.useProgram(program)
-
-  // Fullscreen quad
-  const buf = gl.createBuffer()
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW)
-
-  const aPos = gl.getAttribLocation(program, 'a_position')
-  gl.enableVertexAttribArray(aPos)
-  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
-
-  const uRes = gl.getUniformLocation(program, 'u_resolution')
-  const uTime = gl.getUniformLocation(program, 'u_time')
-
-  function resize() {
+  function init() {
     const dpr = Math.min(window.devicePixelRatio, 2)
-    canvas!.width = canvas!.clientWidth * dpr
-    canvas!.height = canvas!.clientHeight * dpr
-    gl!.viewport(0, 0, canvas!.width, canvas!.height)
+    w = canvasEl.clientWidth
+    h = canvasEl.clientHeight
+    canvasEl.width = w * dpr
+    canvasEl.height = h * dpr
+    ctx2.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+    const numCols = Math.floor(w / colWidth)
+    columns = []
+    for (let i = 0; i < numCols; i++) {
+      if (Math.random() > 0.35) continue // only ~65% of columns active
+      const snippet = pickSnippet()
+      columns.push({
+        x: i * colWidth,
+        speed: 0.3 + Math.random() * 0.8,
+        chars: snippet.split(''),
+        y: -Math.random() * h * 2,
+        opacity: 0.08 + Math.random() * 0.2,
+        fontSize: 11 + Math.floor(Math.random() * 3),
+        lastCharTime: 0,
+        charInterval: 40 + Math.random() * 80,
+      })
+    }
   }
 
-  resize()
-  window.addEventListener('resize', resize)
+  init()
+  window.addEventListener('resize', init)
 
-  const start = performance.now()
+  let lastTime = performance.now()
 
   function draw() {
-    const t = (performance.now() - start) / 1000
-    gl!.uniform2f(uRes, canvas!.width, canvas!.height)
-    gl!.uniform1f(uTime, t)
-    gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
+    const now = performance.now()
+    const dt = now - lastTime
+    lastTime = now
+
+    // Fade trail
+    ctx2.fillStyle = 'rgba(8, 14, 24, 0.12)'
+    ctx2.fillRect(0, 0, w, h)
+
+    for (const col of columns) {
+      col.y += col.speed * dt * 0.06
+
+      // Reset when off screen
+      if (col.y > h + 200) {
+        col.y = -100 - Math.random() * 300
+        const snippet = pickSnippet()
+        col.chars = snippet.split('')
+        col.opacity = 0.08 + Math.random() * 0.2
+      }
+
+      // Draw each character
+      const totalHeight = col.chars.length * (col.fontSize + 2)
+      for (let i = 0; i < col.chars.length; i++) {
+        const charY = col.y - totalHeight + i * (col.fontSize + 2)
+        if (charY < -20 || charY > h + 20) continue
+
+        // Leading chars are brighter, trailing chars fade
+        const distFromLead = (col.chars.length - 1 - i) / col.chars.length
+        const alpha = col.opacity * (1 - distFromLead * 0.7)
+        const char = col.chars[i]
+        if (!char) continue
+
+        // Head glow
+        if (i === col.chars.length - 1) {
+          ctx2.fillStyle = `rgba(34, 197, 94, ${alpha * 3})`
+          ctx2.font = `${col.fontSize}px "JetBrains Mono", "Fira Code", monospace`
+          ctx2.fillText(char, col.x, charY)
+          // Glow
+          ctx2.shadowColor = 'rgba(34, 197, 94, 0.3)'
+          ctx2.shadowBlur = 8
+          ctx2.fillText(char, col.x, charY)
+          ctx2.shadowBlur = 0
+        } else {
+          // Green gradient from bright to dim
+          const g = Math.floor(120 + 135 * (1 - distFromLead))
+          ctx2.fillStyle = `rgba(20, ${g}, 50, ${alpha})`
+          ctx2.font = `${col.fontSize}px "JetBrains Mono", "Fira Code", monospace`
+          ctx2.fillText(char, col.x, charY)
+        }
+      }
+    }
+
+    // Occasional bright flash on a random column
+    if (Math.random() < 0.003) {
+      const flashCol = columns[Math.floor(Math.random() * columns.length)]
+      if (flashCol) {
+        const flashY = flashCol.y - 20
+        ctx2.fillStyle = 'rgba(34, 197, 94, 0.08)'
+        ctx2.fillRect(flashCol.x - 4, flashY - 30, colWidth + 8, 60)
+      }
+    }
+
     animId = requestAnimationFrame(draw)
   }
+
+  // Initial clear
+  ctx2.fillStyle = 'rgba(8, 14, 24, 1)'
+  ctx2.fillRect(0, 0, w, h)
 
   draw()
 
   onUnmounted(() => {
     cancelAnimationFrame(animId)
-    window.removeEventListener('resize', resize)
+    window.removeEventListener('resize', init)
   })
 })
 </script>
 
 <template>
-  <canvas ref="canvasRef" class="flow-bg" />
+  <canvas ref="canvasRef" class="code-bg" />
 </template>
 
 <style scoped>
-.flow-bg {
+.code-bg {
   position: absolute;
   inset: 0;
   width: 100%;

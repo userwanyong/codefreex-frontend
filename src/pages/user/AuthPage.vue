@@ -13,7 +13,6 @@ import { useUserStore } from '@/stores/userStore'
 import { loginByEmail, sendEmailCode, register } from '@/api/authController'
 import { parseResponseData } from '@/utils/response'
 import WechatQrCode from '@/components/WechatQrCode.vue'
-import FlowBackground from '@/components/FlowBackground.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -33,6 +32,7 @@ watch(
 )
 
 function switchMode(target: 'login' | 'register') {
+  loginTab.value = 'email'
   mode.value = target
   router.replace({ name: target })
 }
@@ -41,6 +41,9 @@ function switchMode(target: 'login' | 'register') {
 const loginForm = reactive({ email: '', password: '' })
 
 async function handleEmailLogin() {
+  if (loading.value) {
+    return
+  }
   if (!loginForm.email || !loginForm.password) {
     message.warning('请输入邮箱和密码')
     return
@@ -77,10 +80,14 @@ const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 async function handleSendCode() {
+  if (countdown.value > 0 || loading.value) {
+    return
+  }
   if (!regForm.email) {
     message.warning('请输入邮箱')
     return
   }
+  loading.value = true
   try {
     const res = await sendEmailCode(regForm.email)
     if (res.data?.code === 0) {
@@ -91,6 +98,8 @@ async function handleSendCode() {
     }
   } catch {
     message.error('发送失败，请检查网络')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -106,6 +115,9 @@ function startCountdown() {
 }
 
 async function handleRegister() {
+  if (loading.value) {
+    return
+  }
   if (!regForm.email || !regForm.emailCode || !regForm.password || !regForm.inviteCode) {
     message.warning('请填写完整信息')
     return
@@ -126,9 +138,13 @@ async function handleRegister() {
       password: regForm.password,
       inviteCode: regForm.inviteCode,
     })
-    if (res.data?.code === 0) {
-      message.success('注册成功，请登录')
-      switchMode('login')
+    if (res.data?.code === 0 && res.data.data) {
+      const tokenData = parseResponseData<API.TokenResponse>(res.data.data)
+      userStore.setToken(tokenData.accessToken || '')
+      await Promise.all([userStore.fetchLoginUser(), userStore.fetchUserRoles(), userStore.fetchUserInfo()])
+      message.success('注册成功')
+      const redirect = (route.query.redirect as string) || '/'
+      router.push(redirect)
     } else {
       message.error(res.data?.message || '注册失败')
     }
@@ -160,6 +176,9 @@ function handleWechatNewUser(tempToken: string, nickname: string, _avatar: strin
 }
 
 async function handleWechatComplete() {
+  if (loading.value) {
+    return
+  }
   if (!wechatInviteCode.value) {
     message.warning('请输入邀请码')
     return
@@ -247,6 +266,10 @@ function startTyping() {
   }
 
   const line = script[lineIndex]
+  if (!line) {
+    resetTyping()
+    return
+  }
   const plainText = line.text.replace(/<[^>]*>/g, '')
 
   if (charIndex <= plainText.length) {
@@ -310,8 +333,6 @@ onUnmounted(() => {
   <div class="auth-page">
     <!-- Left: Live code generation showcase -->
     <div class="brand-panel">
-      <FlowBackground />
-
       <!-- Terminal window -->
       <div class="terminal">
         <div class="terminal-header">
@@ -393,8 +414,8 @@ onUnmounted(() => {
               <!-- Login form -->
               <Transition name="form-swap" mode="out-in">
                 <div v-if="mode === 'login'" key="login-form">
-                  <a-form layout="vertical" @finish="handleEmailLogin">
-                    <a-form-item>
+                  <a-form :model="loginForm" layout="vertical" @finish="handleEmailLogin">
+                    <a-form-item name="email">
                       <a-input
                         v-model:value="loginForm.email"
                         placeholder="请输入邮箱"
@@ -402,7 +423,7 @@ onUnmounted(() => {
                         :prefix="h(MailOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="password">
                       <a-input-password
                         v-model:value="loginForm.password"
                         placeholder="请输入密码"
@@ -432,8 +453,8 @@ onUnmounted(() => {
 
                 <!-- Register form -->
                 <div v-else key="register-form">
-                  <a-form layout="vertical" @finish="handleRegister">
-                    <a-form-item>
+                  <a-form :model="regForm" layout="vertical" @finish="handleRegister">
+                    <a-form-item name="email">
                       <a-input
                         v-model:value="regForm.email"
                         placeholder="请输入邮箱"
@@ -441,7 +462,7 @@ onUnmounted(() => {
                         :prefix="h(MailOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="emailCode">
                       <a-input-search
                         v-model:value="regForm.emailCode"
                         placeholder="请输入验证码"
@@ -456,7 +477,7 @@ onUnmounted(() => {
                         </template>
                       </a-input-search>
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="password">
                       <a-input-password
                         v-model:value="regForm.password"
                         placeholder="请输入密码（至少6位）"
@@ -464,7 +485,7 @@ onUnmounted(() => {
                         :prefix="h(LockOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="confirmPassword">
                       <a-input-password
                         v-model:value="regForm.confirmPassword"
                         placeholder="请确认密码"
@@ -472,7 +493,7 @@ onUnmounted(() => {
                         :prefix="h(LockOutlined)"
                       />
                     </a-form-item>
-                    <a-form-item>
+                    <a-form-item name="inviteCode">
                       <a-input
                         v-model:value="regForm.inviteCode"
                         placeholder="请输入邀请码"

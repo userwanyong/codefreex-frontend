@@ -2,7 +2,7 @@ import axios from 'axios'
 import { message } from 'ant-design-vue'
 
 const myAxios = axios.create({
-  baseURL: 'http://localhost:8123/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 60000,
   withCredentials: true,
 })
@@ -25,17 +25,22 @@ myAxios.interceptors.response.use(
     const { data } = response
     if (data.code === 40100) {
       if (
-        !response.request.responseURL.includes('user/get/login') &&
-        !window.location.pathname.includes('/user/login')
+        !window.location.pathname.includes('/user/login') &&
+        !window.location.pathname.includes('/login')
       ) {
         message.warning('请先登录')
         localStorage.removeItem('codefreex_token')
-        window.location.href = `/user/login?redirect=${encodeURIComponent(window.location.href)}`
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.href)}`
       }
+    } else if (data.code === 40101) {
+      message.error(data.message || '无权限访问')
     }
     return response
   },
-  (error) => Promise.reject(error),
+  (error) => {
+    message.error(error?.response?.data?.message || error.message || '请求失败，请稍后重试')
+    return Promise.reject(error)
+  },
 )
 
 export default myAxios

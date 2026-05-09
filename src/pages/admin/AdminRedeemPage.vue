@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
-import { generateRedeem, getRedeemList } from '@/api/redeemController'
+import { generateRedeem, getRedeemList, getRedeemUsers } from '@/api/redeemController'
 import { parseResponseData } from '@/utils/response'
 
 const redeems = ref<API.Redeem[]>([])
@@ -14,6 +14,10 @@ const filterStatus = ref<string | undefined>(undefined)
 const generateModalVisible = ref(false)
 const generateLoading = ref(false)
 const generateForm = ref({ quota: 100, batch: '', expireHours: 720, maxUseCount: 1 })
+const detailVisible = ref(false)
+const detailLoading = ref(false)
+const selectedRedeem = ref<API.Redeem | null>(null)
+const redeemUsers = ref<API.RedeemUser[]>([])
 
 const statusMap: Record<string, { text: string; color: string }> = {
   active: { text: '可用', color: 'success' },
@@ -66,6 +70,23 @@ async function handleGenerate() {
     message.error('生成失败')
   } finally {
     generateLoading.value = false
+  }
+}
+
+async function showDetail(record: API.Redeem) {
+  selectedRedeem.value = record
+  detailVisible.value = true
+  detailLoading.value = true
+  redeemUsers.value = []
+  try {
+    const res = await getRedeemUsers(record.id || '')
+    if (res.data?.code === 0 && res.data.data) {
+      redeemUsers.value = parseResponseData<API.RedeemUser[]>(res.data.data)
+    }
+  } catch {
+    message.error('加载使用详情失败')
+  } finally {
+    detailLoading.value = false
   }
 }
 
@@ -122,6 +143,11 @@ onMounted(() => loadRedeems())
       <a-table-column title="批次" data-index="batch" width="120" />
       <a-table-column title="过期时间" data-index="expireTime" width="180" />
       <a-table-column title="创建时间" data-index="createTime" width="180" />
+      <a-table-column title="操作" width="100">
+        <template #default="{ record }">
+          <a-button type="link" size="small" @click="showDetail(record)">详情</a-button>
+        </template>
+      </a-table-column>
     </a-table>
 
     <div class="pagination-wrapper">
@@ -156,6 +182,35 @@ onMounted(() => loadRedeems())
           <a-input-number v-model:value="generateForm.maxUseCount" :min="1" style="width: 100%" />
         </a-form-item>
       </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="detailVisible" title="兑换码使用详情" :footer="null" width="760">
+      <a-descriptions v-if="selectedRedeem" bordered :column="2" size="small" style="margin-bottom: 16px">
+        <a-descriptions-item label="兑换码">
+          {{ selectedRedeem.redeemCode || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="额度">
+          {{ selectedRedeem.quota ?? '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="状态">
+          {{ statusMap[selectedRedeem.status || '']?.text || selectedRedeem.status || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="使用次数">
+          {{ selectedRedeem.usedCount ?? 0 }} / {{ selectedRedeem.maxUseCount ?? 1 }}
+        </a-descriptions-item>
+      </a-descriptions>
+
+      <a-table
+        :data-source="redeemUsers"
+        :loading="detailLoading"
+        :pagination="false"
+        row-key="id"
+        size="small"
+      >
+        <a-table-column title="使用用户 ID" data-index="userId" />
+        <a-table-column title="创建人 ID" data-index="creatorId" />
+        <a-table-column title="使用时间" data-index="createTime" />
+      </a-table>
     </a-modal>
   </div>
 </template>
