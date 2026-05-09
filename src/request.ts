@@ -1,9 +1,10 @@
 import axios from 'axios'
 import { message } from 'ant-design-vue'
+import { apiConfig } from '../config/api'
 
 const myAxios = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  timeout: 60000,
+  baseURL: apiConfig.baseURL,
+  timeout: apiConfig.timeout,
   withCredentials: true,
 })
 

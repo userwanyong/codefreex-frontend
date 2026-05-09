@@ -35,6 +35,20 @@ npm install
 npm run dev
 ```
 
+### API Configuration
+
+API request flow is managed in one file:
+
+- `config/api.ts`
+  - `baseURL`: frontend request prefix
+  - `proxyTarget`: Vite dev proxy target
+  - `timeout`: Axios timeout
+
+Both `src/request.ts` and `vite.config.ts` read this same config file.
+
+In development, requests go to `/api/...` first and Vite proxies them to the backend target.
+In production, requests still use `/api/...`, and the reverse proxy or gateway is expected to handle forwarding.
+
 ### Type-Check, Compile and Minify for Production
 
 ```sh
