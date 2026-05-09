@@ -41,6 +41,9 @@ function switchMode(target: 'login' | 'register') {
 const loginForm = reactive({ email: '', password: '' })
 
 async function handleEmailLogin() {
+  if (loading.value) {
+    return
+  }
   if (!loginForm.email || !loginForm.password) {
     message.warning('请输入邮箱和密码')
     return
@@ -112,6 +115,9 @@ function startCountdown() {
 }
 
 async function handleRegister() {
+  if (loading.value) {
+    return
+  }
   if (!regForm.email || !regForm.emailCode || !regForm.password || !regForm.inviteCode) {
     message.warning('请填写完整信息')
     return
@@ -166,6 +172,9 @@ function handleWechatNewUser(tempToken: string, nickname: string, _avatar: strin
 }
 
 async function handleWechatComplete() {
+  if (loading.value) {
+    return
+  }
   if (!wechatInviteCode.value) {
     message.warning('请输入邀请码')
     return
@@ -401,7 +410,7 @@ onUnmounted(() => {
               <!-- Login form -->
               <Transition name="form-swap" mode="out-in">
                 <div v-if="mode === 'login'" key="login-form">
-                  <a-form :model="loginForm" layout="vertical" @finish="handleEmailLogin" @submit.prevent="handleEmailLogin">
+                  <a-form :model="loginForm" layout="vertical" @finish="handleEmailLogin">
                     <a-form-item name="email">
                       <a-input
                         v-model:value="loginForm.email"
@@ -440,7 +449,7 @@ onUnmounted(() => {
 
                 <!-- Register form -->
                 <div v-else key="register-form">
-                  <a-form :model="regForm" layout="vertical" @finish="handleRegister" @submit.prevent="handleRegister">
+                  <a-form :model="regForm" layout="vertical" @finish="handleRegister">
                     <a-form-item name="email">
                       <a-input
                         v-model:value="regForm.email"
