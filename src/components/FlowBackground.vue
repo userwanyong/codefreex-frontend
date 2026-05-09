@@ -11,7 +11,6 @@ onMounted(() => {
   const gl = canvas.getContext('webgl')
   if (!gl) return
 
-  // Shaders
   const vertSrc = `
     attribute vec2 a_position;
     void main() {
@@ -24,97 +23,121 @@ onMounted(() => {
     uniform vec2 u_resolution;
     uniform float u_time;
 
-    // Simplex-style noise
-    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-    vec2 mod289v2(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-    vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
-
-    float snoise(vec2 v) {
-      const vec4 C = vec4(0.211324865405187, 0.366025403784439,
-                          -0.577350269189626, 0.024390243902439);
-      vec2 i = floor(v + dot(v, C.yy));
-      vec2 x0 = v - i + dot(i, C.xx);
-      vec2 i1;
-      i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-      vec4 x12 = x0.xyxy + C.xxzz;
-      x12.xy -= i1;
-      i = mod289v2(i);
-      vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0))
-                       + i.x + vec3(0.0, i1.x, 1.0));
-      vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy),
-                              dot(x12.zw, x12.zw)), 0.0);
-      m = m * m;
-      m = m * m;
-      vec3 x = 2.0 * fract(p * C.www) - 1.0;
-      vec3 h = abs(x) - 0.5;
-      vec3 ox = floor(x + 0.5);
-      vec3 a0 = x - ox;
-      m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
-      vec3 g;
-      g.x = a0.x * x0.x + h.x * x0.y;
-      g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-      return 130.0 * dot(m, g);
+    // Hash functions for pseudo-random
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
     }
 
-    // Fractal Brownian Motion
-    float fbm(vec2 p) {
-      float f = 0.0;
-      float w = 0.5;
-      for (int i = 0; i < 5; i++) {
-        f += w * snoise(p);
-        p *= 2.0;
-        w *= 0.5;
-      }
-      return f;
+    float hash(float n) {
+      return fract(sin(n) * 43758.5453);
+    }
+
+    // Smooth noise
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      float a = hash(i);
+      float b = hash(i + vec2(1.0, 0.0));
+      float c = hash(i + vec2(0.0, 1.0));
+      float d = hash(i + vec2(1.0, 1.0));
+      return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+
+    // Code column: simulates falling characters as bright pulses
+    float codeColumn(vec2 uv, float colX, float speed, float brightness) {
+      // Vertical falling position
+      float y = fract(uv.y + u_time * speed * 0.08);
+      // Character-like segments
+      float charSize = 0.04 + hash(vec2(colX * 7.0, 0.0)) * 0.02;
+      float charY = floor(uv.y / charSize);
+      float charOn = step(0.45, hash(vec2(colX * 13.0, charY + floor(u_time * speed * 2.0))));
+      // Column glow width
+      float colDist = abs(uv.x - colX);
+      float colGlow = smoothstep(0.012, 0.0, colDist);
+      // Vertical fade (brighter at bottom "leading edge")
+      float leadEdge = smoothstep(0.0, 0.15, y) * smoothstep(1.0, 0.7, y);
+      return colGlow * charOn * leadEdge * brightness;
+    }
+
+    // Grid pulse: subtle grid lines that breathe
+    float gridPulse(vec2 uv) {
+      float gridX = smoothstep(0.003, 0.0, abs(fract(uv.x * 60.0) - 0.5) - 0.48);
+      float gridY = smoothstep(0.003, 0.0, abs(fract(uv.y * 40.0) - 0.5) - 0.48);
+      float pulse = sin(u_time * 0.5) * 0.5 + 0.5;
+      return (gridX + gridY) * 0.03 * pulse;
+    }
+
+    // Scanline sweep
+    float scanline(vec2 uv) {
+      float sweep = fract(u_time * 0.06);
+      float dist = abs(uv.y - sweep);
+      float line = smoothstep(0.008, 0.0, dist);
+      return line * 0.15;
     }
 
     void main() {
       vec2 uv = gl_FragCoord.xy / u_resolution;
-      vec2 p = uv * 3.0;
+      vec2 aspect = vec2(u_resolution.x / u_resolution.y, 1.0);
+      vec2 p = uv * aspect;
 
-      float t = u_time * 0.15;
+      // Base dark color
+      vec3 bg = vec3(0.015, 0.025, 0.04);
 
-      // Layered flow
-      float n1 = fbm(p + vec2(t * 0.3, t * 0.2));
-      float n2 = fbm(p * 1.5 + vec2(-t * 0.2, t * 0.4) + n1 * 0.5);
-      float n3 = fbm(p * 0.8 + vec2(t * 0.1, -t * 0.15) + n2 * 0.3);
+      // Green code rain columns
+      float code = 0.0;
+      float numCols = 40.0;
+      for (float i = 0.0; i < 40.0; i++) {
+        float colX = hash(vec2(i * 3.7, 1.0)) * aspect.x;
+        float speed = 0.5 + hash(vec2(i * 2.3, 3.0)) * 1.5;
+        float brightness = 0.3 + hash(vec2(i * 5.1, 7.0)) * 0.7;
+        // Each column has slightly different timing
+        float phase = hash(vec2(i * 1.1, 5.0)) * 6.28;
+        float isActive = step(0.3, hash(vec2(i * 4.3, 2.0)));
+        code += codeColumn(p, colX, speed, brightness) * isActive;
+      }
 
-      // Domain warping for liquid feel
-      float warp = fbm(p + fbm(p + fbm(p + vec2(t * 0.1))));
+      // Color palette
+      vec3 greenBright = vec3(0.13, 0.95, 0.38);
+      vec3 greenMid = vec3(0.05, 0.6, 0.2);
+      vec3 greenDim = vec3(0.02, 0.25, 0.08);
+      vec3 cyan = vec3(0.05, 0.5, 0.6);
 
-      // Combine
-      float flow = n1 * 0.3 + n2 * 0.4 + n3 * 0.3;
-      flow = flow * 0.5 + 0.5; // normalize to 0-1
-      flow = smoothstep(0.3, 0.7, flow);
-
-      // Warp intensity
-      float warpFlow = smoothstep(0.35, 0.65, warp * 0.5 + 0.5);
-
-      // Mix flow and warp
-      float final = mix(flow, warpFlow, 0.5);
-
-      // Dark base
-      vec3 bg = vec3(0.02, 0.04, 0.08);
-
-      // Green glow
-      vec3 green1 = vec3(0.05, 0.45, 0.15);
-      vec3 green2 = vec3(0.02, 0.25, 0.08);
-      vec3 cyan = vec3(0.02, 0.3, 0.35);
-
-      // Color mixing
+      // Combine code rain
       vec3 col = bg;
-      col = mix(col, green2, final * 0.4);
-      col = mix(col, green1, pow(final, 2.0) * 0.3);
-      col = mix(col, cyan, pow(warpFlow, 3.0) * 0.15);
+      col += greenDim * code * 0.3;
+      col += greenMid * pow(code, 1.5) * 0.5;
+      col += greenBright * pow(code, 3.0) * 0.4;
+
+      // Grid pulse
+      float grid = gridPulse(uv);
+      col += greenDim * grid;
+
+      // Scanline sweep
+      float scan = scanline(uv);
+      col += cyan * scan;
+
+      // Subtle horizontal rhythm bars
+      float bars = 0.0;
+      for (float i = 0.0; i < 6.0; i++) {
+        float barY = hash(vec2(i * 7.0, 0.0));
+        float barSpeed = 0.02 + hash(vec2(i * 3.0, 1.0)) * 0.03;
+        float barPhase = u_time * barSpeed + i * 1.05;
+        float barPulse = sin(barPhase) * 0.5 + 0.5;
+        float barDist = abs(uv.y - barY);
+        float bar = smoothstep(0.001, 0.0, barDist - 0.0005) * barPulse;
+        bars += bar;
+      }
+      col += greenBright * bars * 0.08;
 
       // Vignette
-      float vig = 1.0 - length((uv - 0.5) * 1.2);
-      vig = smoothstep(0.0, 0.7, vig);
-      col *= vig * 0.8 + 0.2;
+      float vig = 1.0 - length((uv - 0.5) * 1.4);
+      vig = smoothstep(-0.1, 0.6, vig);
+      col *= vig * 0.85 + 0.15;
 
-      // Subtle scanlines
-      float scan = sin(gl_FragCoord.y * 1.5) * 0.02 + 1.0;
-      col *= scan;
+      // Subtle noise grain
+      float grain = hash(uv * u_resolution + u_time) * 0.03;
+      col += grain;
 
       gl_FragColor = vec4(col, 1.0);
     }
@@ -148,7 +171,6 @@ onMounted(() => {
 
   gl.useProgram(program)
 
-  // Fullscreen quad
   const buf = gl.createBuffer()
   gl.bindBuffer(gl.ARRAY_BUFFER, buf)
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW)
@@ -190,11 +212,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <canvas ref="canvasRef" class="flow-bg" />
+  <canvas ref="canvasRef" class="code-bg" />
 </template>
 
 <style scoped>
-.flow-bg {
+.code-bg {
   position: absolute;
   inset: 0;
   width: 100%;

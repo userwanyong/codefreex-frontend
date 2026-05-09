@@ -13,7 +13,6 @@ import { useUserStore } from '@/stores/userStore'
 import { loginByEmail, sendEmailCode, register } from '@/api/authController'
 import { parseResponseData } from '@/utils/response'
 import WechatQrCode from '@/components/WechatQrCode.vue'
-import FlowBackground from '@/components/FlowBackground.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -310,8 +309,6 @@ onUnmounted(() => {
   <div class="auth-page">
     <!-- Left: Live code generation showcase -->
     <div class="brand-panel">
-      <FlowBackground />
-
       <!-- Terminal window -->
       <div class="terminal">
         <div class="terminal-header">
