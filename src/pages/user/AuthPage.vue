@@ -138,9 +138,13 @@ async function handleRegister() {
       password: regForm.password,
       inviteCode: regForm.inviteCode,
     })
-    if (res.data?.code === 0) {
-      message.success('注册成功，请登录')
-      switchMode('login')
+    if (res.data?.code === 0 && res.data.data) {
+      const tokenData = parseResponseData<API.TokenResponse>(res.data.data)
+      userStore.setToken(tokenData.accessToken || '')
+      await Promise.all([userStore.fetchLoginUser(), userStore.fetchUserRoles(), userStore.fetchUserInfo()])
+      message.success('注册成功')
+      const redirect = (route.query.redirect as string) || '/'
+      router.push(redirect)
     } else {
       message.error(res.data?.message || '注册失败')
     }
