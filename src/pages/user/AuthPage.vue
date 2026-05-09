@@ -77,10 +77,14 @@ const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 async function handleSendCode() {
+  if (countdown.value > 0 || loading.value) {
+    return
+  }
   if (!regForm.email) {
     message.warning('请输入邮箱')
     return
   }
+  loading.value = true
   try {
     const res = await sendEmailCode(regForm.email)
     if (res.data?.code === 0) {
@@ -91,6 +95,8 @@ async function handleSendCode() {
     }
   } catch {
     message.error('发送失败，请检查网络')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -452,7 +458,7 @@ onUnmounted(() => {
                         @search="handleSendCode"
                       >
                         <template #enterButton>
-                          <a-button :disabled="countdown > 0" class="code-btn" @click="handleSendCode">
+                          <a-button :disabled="countdown > 0" class="code-btn">
                             {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
                           </a-button>
                         </template>
