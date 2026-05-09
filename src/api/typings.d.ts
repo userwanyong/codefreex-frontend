@@ -64,8 +64,11 @@ declare namespace API {
     appName?: string
     description?: string
     cover?: string
+    initPrompt?: string
     codeGenType?: string
     status?: string
+    deployKey?: string
+    deployedTime?: string
     isPublic?: number
     isFeatured?: number
     priority?: number

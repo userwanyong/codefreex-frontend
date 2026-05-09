@@ -11,6 +11,13 @@ import {
   ClockCircleOutlined,
   CodeOutlined,
   TagOutlined,
+  MessageOutlined,
+  GlobalOutlined,
+  StarOutlined,
+  RocketOutlined,
+  FileTextOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons-vue'
 import { getApp, editApp, deleteApp } from '@/api/appController'
 import { parseResponseData } from '@/utils/response'
@@ -135,12 +142,19 @@ onMounted(() => loadApp())
 
     <a-spin :spinning="loading">
       <template v-if="app">
-        <!-- Hero banner -->
-        <div class="detail-hero" :style="{ background: getGradient(app.appName || '') }">
-          <div class="hero-content">
-            <div class="hero-info">
+        <div class="detail-layout">
+          <!-- Left: Sidebar -->
+          <aside class="detail-sidebar">
+            <!-- App Cover -->
+            <div class="sidebar-cover" :style="{ background: getGradient(app.appName || '') }">
+              <span class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
+            </div>
+
+            <!-- App Identity -->
+            <div class="sidebar-identity">
+              <h1 class="app-name">{{ app.appName || '未命名应用' }}</h1>
               <div
-                class="hero-status"
+                class="status-badge"
                 :style="{
                   color: statusConfig[app.status || 'draft']?.color,
                   background: statusConfig[app.status || 'draft']?.bg,
@@ -148,73 +162,109 @@ onMounted(() => loadApp())
               >
                 {{ statusConfig[app.status || 'draft']?.label }}
               </div>
-              <h1 class="hero-title">{{ app.appName || '未命名应用' }}</h1>
-              <p class="hero-desc">{{ app.description || '暂无描述' }}</p>
+              <p class="app-desc">{{ app.description || '暂无描述' }}</p>
             </div>
-            <div v-if="isOwner" class="hero-actions">
-              <a-button class="action-btn" @click="openEditModal">
-                <EditOutlined />
-                编辑
+
+            <!-- Quick Stats -->
+            <div class="stats-row">
+              <div class="stat-item">
+                <EyeOutlined />
+                <span>{{ app.viewCount ?? 0 }}</span>
+              </div>
+              <div class="stat-item">
+                <LikeOutlined />
+                <span>{{ app.likeCount ?? 0 }}</span>
+              </div>
+            </div>
+
+            <!-- Divider -->
+            <div class="sidebar-divider" />
+
+            <!-- Meta Info -->
+            <div class="meta-list">
+              <div class="meta-row">
+                <CodeOutlined class="meta-icon" />
+                <span class="meta-label">生成类型</span>
+                <span class="meta-value">{{ app.codeGenType || '-' }}</span>
+              </div>
+              <div class="meta-row">
+                <GlobalOutlined class="meta-icon" />
+                <span class="meta-label">是否公开</span>
+                <span class="meta-value" :class="app.isPublic === 1 ? 'val-yes' : 'val-no'">
+                  <CheckCircleOutlined v-if="app.isPublic === 1" />
+                  <CloseCircleOutlined v-else />
+                  {{ app.isPublic === 1 ? '公开' : '私有' }}
+                </span>
+              </div>
+              <div class="meta-row">
+                <StarOutlined class="meta-icon" />
+                <span class="meta-label">是否精选</span>
+                <span class="meta-value" :class="app.isFeatured === 1 ? 'val-yes' : 'val-no'">
+                  <CheckCircleOutlined v-if="app.isFeatured === 1" />
+                  <CloseCircleOutlined v-else />
+                  {{ app.isFeatured === 1 ? '精选' : '普通' }}
+                </span>
+              </div>
+              <div class="meta-row">
+                <ClockCircleOutlined class="meta-icon" />
+                <span class="meta-label">创建时间</span>
+                <span class="meta-value">{{ app.createTime || '-' }}</span>
+              </div>
+              <div class="meta-row">
+                <RocketOutlined class="meta-icon" />
+                <span class="meta-label">部署时间</span>
+                <span class="meta-value">{{ app.deployedTime || '-' }}</span>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div v-if="isOwner" class="sidebar-actions">
+              <a-button block class="action-primary" @click="router.push(`/app/${appId}/chat`)">
+                <MessageOutlined />
+                AI 工作台
               </a-button>
-              <a-button danger class="action-btn" @click="handleDelete">
-                <DeleteOutlined />
-                删除
-              </a-button>
+              <div class="action-row">
+                <a-button class="action-secondary" @click="openEditModal">
+                  <EditOutlined />
+                  编辑
+                </a-button>
+                <a-button class="action-danger" @click="handleDelete">
+                  <DeleteOutlined />
+                  删除
+                </a-button>
+              </div>
             </div>
-          </div>
-        </div>
+          </aside>
 
-        <!-- Info cards -->
-        <div class="info-grid">
-          <div class="info-card">
-            <div class="info-icon">
-              <CodeOutlined />
-            </div>
-            <div class="info-content">
-              <span class="info-label">生成类型</span>
-              <span class="info-value">{{ app.codeGenType || '-' }}</span>
-            </div>
-          </div>
+          <!-- Right: Main Content -->
+          <div class="detail-main">
+            <!-- Initial Prompt -->
+            <section v-if="app.initPrompt" class="content-section">
+              <div class="section-header">
+                <FileTextOutlined class="section-icon" />
+                <h3 class="section-title">初始提示词</h3>
+              </div>
+              <div class="prompt-block">{{ app.initPrompt }}</div>
+            </section>
 
-          <div class="info-card">
-            <div class="info-icon">
-              <EyeOutlined />
-            </div>
-            <div class="info-content">
-              <span class="info-label">浏览量</span>
-              <span class="info-value">{{ app.viewCount ?? 0 }}</span>
-            </div>
-          </div>
+            <!-- Tags -->
+            <section v-if="app.tags?.length" class="content-section">
+              <div class="section-header">
+                <TagOutlined class="section-icon" />
+                <h3 class="section-title">标签</h3>
+              </div>
+              <div class="tags-wrap">
+                <span v-for="tag in app.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+              </div>
+            </section>
 
-          <div class="info-card">
-            <div class="info-icon">
-              <LikeOutlined />
-            </div>
-            <div class="info-content">
-              <span class="info-label">点赞数</span>
-              <span class="info-value">{{ app.likeCount ?? 0 }}</span>
-            </div>
-          </div>
-
-          <div class="info-card">
-            <div class="info-icon">
-              <ClockCircleOutlined />
-            </div>
-            <div class="info-content">
-              <span class="info-label">创建时间</span>
-              <span class="info-value">{{ app.createTime || '-' }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tags -->
-        <div v-if="app.tags?.length" class="tags-section">
-          <h3 class="section-title">
-            <TagOutlined />
-            标签
-          </h3>
-          <div class="tags-list">
-            <span v-for="tag in app.tags" :key="tag" class="tag-item">{{ tag }}</span>
+            <!-- Empty prompt placeholder -->
+            <section v-if="!app.initPrompt && !app.tags?.length" class="content-section">
+              <div class="empty-hint">
+                <CodeOutlined class="empty-hint-icon" />
+                <p>暂无更多详细信息</p>
+              </div>
+            </section>
           </div>
         </div>
       </template>
@@ -245,14 +295,14 @@ onMounted(() => loadApp())
 
 <style scoped>
 .detail-page {
-  max-width: 960px;
+  max-width: 1100px;
   margin: 0 auto;
 }
 
 .back-btn {
   color: var(--text-secondary) !important;
-  margin-bottom: var(--space-5);
-  display: flex;
+  margin-bottom: var(--space-6);
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   font-size: 14px;
@@ -262,170 +312,314 @@ onMounted(() => loadApp())
   color: var(--text-primary) !important;
 }
 
-/* Hero banner */
-.detail-hero {
-  border-radius: var(--radius-xl);
-  padding: var(--space-10) var(--space-8);
-  margin-bottom: var(--space-6);
-  position: relative;
-  overflow: hidden;
-}
-
-.detail-hero::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
-  pointer-events: none;
-}
-
-.hero-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-}
-
-.hero-info {
-  flex: 1;
-}
-
-.hero-status {
-  display: inline-block;
-  padding: 4px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: var(--space-4);
-  backdrop-filter: blur(8px);
-}
-
-.hero-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: white;
-  margin: 0 0 var(--space-3);
-  letter-spacing: -0.5px;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.hero-desc {
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.8);
-  margin: 0;
-  max-width: 500px;
-}
-
-.hero-actions {
-  display: flex;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-
-.action-btn {
-  background: rgba(255, 255, 255, 0.15) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: white !important;
-  backdrop-filter: blur(8px);
-  border-radius: var(--radius-md) !important;
-  font-weight: 500;
-}
-
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.25) !important;
-}
-
-/* Info grid */
-.info-grid {
+/* ============================================
+   Layout: Sidebar + Main
+   ============================================ */
+.detail-layout {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  grid-template-columns: 340px 1fr;
+  gap: var(--space-6);
+  align-items: start;
 }
 
-.info-card {
+/* ============================================
+   Sidebar
+   ============================================ */
+.detail-sidebar {
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  transition: all var(--duration-normal) var(--ease-out);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  position: sticky;
+  top: calc(60px + var(--space-6));
 }
 
-.info-card:hover {
-  border-color: var(--border-hover);
-}
-
-.info-icon {
-  width: 40px;
-  height: 40px;
+.sidebar-cover {
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent-soft);
-  border-radius: var(--radius-md);
-  color: var(--accent);
-  font-size: 18px;
-  flex-shrink: 0;
+  position: relative;
 }
 
-.info-content {
+.sidebar-cover::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(transparent, var(--bg-surface));
+}
+
+.cover-letter {
+  font-size: 64px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.12);
+  font-family: var(--font-mono);
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar-identity {
+  padding: 0 var(--space-6) var(--space-4);
+  margin-top: calc(-1 * var(--space-4));
+  position: relative;
+  z-index: 2;
+}
+
+.app-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-3);
+  letter-spacing: -0.3px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+
+.app-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Stats row */
+.stats-row {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 var(--space-6);
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.stat-item :deep(.anticon) {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* Divider */
+.sidebar-divider {
+  height: 1px;
+  background: var(--glass-border);
+  margin: var(--space-5) var(--space-6);
+}
+
+/* Meta list */
+.meta-list {
+  padding: 0 var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-3);
 }
 
-.info-label {
-  font-size: 12px;
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 13px;
+}
+
+.meta-icon {
+  color: var(--text-muted);
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+}
+
+.meta-label {
+  color: var(--text-muted);
+  min-width: 64px;
+}
+
+.meta-value {
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.val-yes {
+  color: #22C55E;
+}
+
+.val-no {
   color: var(--text-muted);
 }
 
-.info-value {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
+/* Sidebar actions */
+.sidebar-actions {
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
-/* Tags */
-.tags-section {
+.action-primary {
+  height: 42px;
+  border-radius: var(--radius-md) !important;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.action-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.action-secondary,
+.action-danger {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-md) !important;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.action-secondary {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--text-secondary) !important;
+}
+
+.action-secondary:hover {
+  border-color: var(--border-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.action-danger {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  color: #EF4444 !important;
+}
+
+.action-danger:hover {
+  background: rgba(239, 68, 68, 0.18) !important;
+}
+
+/* ============================================
+   Main Content
+   ============================================ */
+.detail-main {
+  min-width: 0;
+}
+
+.content-section {
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   padding: var(--space-6);
+  margin-bottom: var(--space-5);
+  transition: border-color var(--duration-normal) var(--ease-out);
+}
+
+.content-section:hover {
+  border-color: var(--border-hover);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.section-icon {
+  color: var(--accent);
+  font-size: 16px;
 }
 
 .section-title {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  margin: 0;
 }
 
-.tags-list {
+/* Prompt block */
+.prompt-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-sans);
+}
+
+/* Tags */
+.tags-wrap {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.tag-item {
-  padding: 4px 14px;
+.tag-chip {
+  padding: 5px 16px;
   background: var(--bg-elevated);
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   font-size: 13px;
   color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
-/* Empty state */
+.tag-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Empty hint */
+.empty-hint {
+  text-align: center;
+  padding: var(--space-12) 0;
+}
+
+.empty-hint-icon {
+  font-size: 40px;
+  color: var(--text-disabled);
+  margin-bottom: var(--space-4);
+}
+
+.empty-hint p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ============================================
+   Empty State
+   ============================================ */
 .empty-state {
   text-align: center;
   padding: var(--space-16) 0;
@@ -444,20 +638,16 @@ onMounted(() => loadApp())
   margin: 0 0 var(--space-6);
 }
 
-/* Responsive */
+/* ============================================
+   Responsive
+   ============================================ */
 @media (max-width: 768px) {
-  .hero-content {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-5);
+  .detail-layout {
+    grid-template-columns: 1fr;
   }
 
-  .info-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .hero-title {
-    font-size: 24px;
+  .detail-sidebar {
+    position: static;
   }
 }
 </style>

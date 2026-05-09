@@ -9,6 +9,8 @@ import {
   DeleteOutlined,
   RocketOutlined,
   CodeOutlined,
+  MessageOutlined,
+  EditOutlined,
 } from '@ant-design/icons-vue'
 import { getMyApps, deleteApp } from '@/api/appController'
 import { parseResponseData } from '@/utils/response'
@@ -97,10 +99,6 @@ onMounted(() => loadApps())
         <h1 class="page-title">我的应用</h1>
         <p class="page-subtitle">管理你创建的所有应用</p>
       </div>
-      <a-button type="primary" class="create-btn" @click="router.push('/app/create')">
-        <PlusOutlined />
-        创建应用
-      </a-button>
     </div>
 
     <!-- Loading -->
@@ -154,16 +152,23 @@ onMounted(() => loadApps())
               <a-button
                 type="text"
                 size="small"
-                class="action-btn"
-                @click.stop="router.push(`/app/${app.id}`)"
+                class="action-btn action-chat"
+                @click.stop="router.push(`/app/${app.id}/chat`)"
               >
-                <CodeOutlined />
+                <MessageOutlined />
               </a-button>
               <a-button
                 type="text"
                 size="small"
-                danger
-                class="action-btn"
+                class="action-btn action-edit"
+                @click.stop="router.push(`/app/${app.id}`)"
+              >
+                <EditOutlined />
+              </a-button>
+              <a-button
+                type="text"
+                size="small"
+                class="action-btn action-delete"
                 @click="app.id && handleDelete(app.id, $event)"
               >
                 <DeleteOutlined />
@@ -178,11 +183,7 @@ onMounted(() => loadApps())
     <div v-else class="empty-state">
       <RocketOutlined class="empty-icon" />
       <h3>还没有应用</h3>
-      <p>创建你的第一个 AI 应用吧</p>
-      <a-button type="primary" class="create-btn" @click="router.push('/app/create')">
-        <PlusOutlined />
-        创建应用
-      </a-button>
+      <p>前往首页创建你的第一个 AI 应用吧</p>
     </div>
 
     <!-- Pagination -->
@@ -396,6 +397,30 @@ onMounted(() => loadApps())
 
 .action-btn:hover {
   background: var(--bg-elevated) !important;
+}
+
+.action-chat {
+  color: var(--accent) !important;
+}
+
+.action-chat:hover {
+  background: var(--accent-soft) !important;
+}
+
+.action-edit {
+  color: #3B82F6 !important;
+}
+
+.action-edit:hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.action-delete {
+  color: #EF4444 !important;
+}
+
+.action-delete:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
 }
 
 /* Empty state */
