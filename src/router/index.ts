@@ -55,6 +55,12 @@ const router = createRouter({
           component: () => import('@/pages/app/AppDetailPage.vue'),
         },
         {
+          path: 'app/:appId/chat',
+          name: 'appchat',
+          component: () => import('@/pages/app/AppChatPage.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'invite',
           name: 'invite',
           component: () => import('@/pages/invite/InvitePage.vue'),

@@ -43,6 +43,8 @@ const adminItems = [
   { key: 'adminredeems', label: '兑换码管理', path: '/admin/redeem' },
 ]
 
+const isHomePage = computed(() => route.path === '/')
+
 const activeKey = computed(() => route.name as string)
 
 async function handleLogout() {
@@ -59,7 +61,7 @@ function navigate(path: string) {
 <template>
   <div class="layout">
     <!-- Top Navigation -->
-    <header class="nav-header" :class="{ scrolled }">
+    <header class="nav-header" :class="{ scrolled, 'nav-transparent': isHomePage && !scrolled }">
       <div class="nav-container">
         <!-- Logo -->
         <router-link to="/" class="nav-logo">
@@ -99,8 +101,8 @@ function navigate(path: string) {
         <!-- Right side -->
         <div class="nav-right">
           <template v-if="userStore.isLoggedIn">
-            <a-button type="primary" class="create-btn" @click="router.push('/app/create')">
-              + 创建应用
+            <a-button type="primary" class="create-btn" @click="router.push('/')">
+              + 新建应用
             </a-button>
             <a-dropdown placement="bottomRight">
               <div class="user-avatar-btn">
@@ -170,7 +172,7 @@ function navigate(path: string) {
     </Transition>
 
     <!-- Main Content -->
-    <main class="main-content">
+    <main class="main-content" :class="{ 'main-home': isHomePage }">
       <router-view />
     </main>
   </div>
@@ -203,6 +205,13 @@ function navigate(path: string) {
 .nav-header.scrolled {
   border-bottom-color: var(--glass-border);
   background: rgba(11, 15, 26, 0.85);
+}
+
+.nav-header.nav-transparent {
+  background: rgba(11, 15, 26, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom-color: transparent;
 }
 
 .nav-container {
@@ -376,6 +385,11 @@ function navigate(path: string) {
   flex: 1;
   margin-top: 60px;
   padding: var(--space-8) var(--space-6);
+}
+
+.main-content.main-home {
+  margin-top: 0;
+  padding: 0;
 }
 
 /* ============================================

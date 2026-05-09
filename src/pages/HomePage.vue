@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { EyeOutlined, LikeOutlined, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined } from '@ant-design/icons-vue'
+import { EyeOutlined, LikeOutlined, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined } from '@ant-design/icons-vue'
 import { getFeaturedApps, createApp } from '@/api/appController'
+import { reviewPrompt, optimizePrompt } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
 import { message } from 'ant-design-vue'
@@ -13,6 +14,7 @@ const userStore = useUserStore()
 const apps = ref<API.AppVO[]>([])
 const loading = ref(false)
 const creating = ref(false)
+const optimizing = ref(false)
 const hasNext = ref(false)
 const nextCursor = ref<string | undefined>(undefined)
 const promptText = ref('')
@@ -77,6 +79,28 @@ async function loadApps(isLoadMore = false) {
   }
 }
 
+async function handleOptimize() {
+  const text = promptText.value.trim()
+  if (!text) {
+    message.warning('请先描述你想要的应用')
+    return
+  }
+  optimizing.value = true
+  try {
+    const res = await optimizePrompt(text)
+    if (res.data?.code === 0 && res.data.data) {
+      promptText.value = typeof res.data.data === 'string' ? res.data.data : String(res.data.data)
+      message.success('提示词已优化')
+    } else {
+      message.warning(res.data?.message || '优化失败，使用原始提示词')
+    }
+  } catch {
+    message.error('优化失败，请检查网络')
+  } finally {
+    optimizing.value = false
+  }
+}
+
 async function handleCreateApp() {
   if (!promptText.value.trim()) {
     message.warning('请描述你想要的应用')
@@ -88,11 +112,27 @@ async function handleCreateApp() {
   }
   creating.value = true
   try {
-    const res = await createApp({ initPrompt: promptText.value.trim() })
+    // Step 1: 预审核提示词
+    const text = promptText.value.trim()
+    const reviewRes = await reviewPrompt(text)
+    if (reviewRes.data?.code === 0 && reviewRes.data.data) {
+      const reviewData = parseResponseData<{ safe?: boolean; reason?: string; route?: string }>(reviewRes.data.data)
+      if (reviewData.safe === false) {
+        message.warning(reviewData.reason || '提示词未通过安全审核，请修改后重试')
+        return
+      }
+    }
+
+    // Step 2: 创建应用
+    const res = await createApp({ initPrompt: text })
     if (res.data?.code === 0 && res.data.data) {
-      const appId = res.data.data as unknown as string
-      message.success('应用创建成功')
-      router.push(`/app/${appId}`)
+      const appData = parseResponseData<API.App>(res.data.data)
+      const appId = appData.id || ''
+      message.success('应用创建成功，请耐心等待...')
+      router.push({
+        path: `/app/${appId}/chat`,
+        query: { prompt: promptText.value.trim() },
+      })
     } else {
       message.error(res.data?.message || '创建失败')
     }
@@ -143,15 +183,26 @@ onMounted(() => loadApps())
             />
             <div class="hero-input-footer">
               <span class="input-hint">按 Enter 发送</span>
-              <a-button
-                type="primary"
-                class="submit-btn"
-                :loading="creating"
-                @click="handleCreateApp"
-              >
-                <RocketOutlined />
-                生成应用
-              </a-button>
+              <div class="input-actions">
+                <a-button
+                  type="text"
+                  size="small"
+                  class="optimize-btn"
+                  :loading="optimizing"
+                  @click="handleOptimize"
+                >
+                  <BulbOutlined /> 优化
+                </a-button>
+                <a-button
+                  type="primary"
+                  class="submit-btn"
+                  :loading="creating"
+                  @click="handleCreateApp"
+                >
+                  <RocketOutlined />
+                  生成应用
+                </a-button>
+              </div>
             </div>
           </div>
         </div>
@@ -256,7 +307,7 @@ onMounted(() => loadApps())
   position: relative;
   z-index: 1;
   text-align: center;
-  padding: var(--space-16) var(--space-6) var(--space-12);
+  padding: calc(60px + var(--space-16)) var(--space-6) var(--space-12);
   overflow: hidden;
   max-width: 1200px;
   margin: 0 auto;
@@ -380,6 +431,23 @@ onMounted(() => loadApps())
   font-size: 12px;
   color: var(--text-muted);
   padding-left: var(--space-2);
+}
+
+.input-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.optimize-btn {
+  color: var(--accent) !important;
+  font-size: 12px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.optimize-btn:hover {
+  background: var(--accent-soft) !important;
 }
 
 .submit-btn {

@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { RocketOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { createApp } from '@/api/appController'
+import { reviewPrompt } from '@/api/aiController'
+import { parseResponseData } from '@/utils/response'
 
 const router = useRouter()
 const loading = ref(false)
@@ -22,15 +24,29 @@ async function handleCreate() {
   }
   loading.value = true
   try {
+    // 预审核提示词
+    const reviewRes = await reviewPrompt(form.initPrompt.trim())
+    if (reviewRes.data?.code === 0 && reviewRes.data.data) {
+      const rd = parseResponseData<{ safe?: boolean; reason?: string }>(reviewRes.data.data)
+      if (rd.safe === false) {
+        message.warning(rd.reason || '提示词未通过安全审核，请修改后重试')
+        return
+      }
+    }
+
     const res = await createApp({
       initPrompt: form.initPrompt,
       appName: form.appName || undefined,
       description: form.description || undefined,
       tags: form.tags.length > 0 ? form.tags : undefined,
     })
-    if (res.data?.code === 0) {
-      message.success('应用创建成功')
-      router.push('/app/my')
+    if (res.data?.code === 0 && res.data.data) {
+      const appData = res.data.data as API.App
+      message.success('应用创建成功，请耐心等待...')
+      router.push({
+        path: `/app/${appData.id}/chat`,
+        query: { prompt: form.initPrompt.trim() },
+      })
     } else {
       message.error(res.data?.message || '创建失败')
     }
