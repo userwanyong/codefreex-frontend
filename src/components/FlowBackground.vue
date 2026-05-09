@@ -71,7 +71,7 @@ onMounted(() => {
   let columns: Column[] = []
   let w = 0
   let h = 0
-  const colWidth = 14
+  const colWidth = 12
   const pickSnippet = () => codePool[Math.floor(Math.random() * codePool.length)] ?? 'const code = []'
 
   function init() {
@@ -82,17 +82,19 @@ onMounted(() => {
     canvasEl.height = h * dpr
     ctx2.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    const numCols = Math.floor(w / colWidth)
+    const numCols = Math.ceil(w / colWidth)
     columns = []
     for (let i = 0; i < numCols; i++) {
-      if (Math.random() > 0.35) continue // only ~65% of columns active
+      // Edge columns always active to avoid gaps
+      const isEdge = i < 2 || i >= numCols - 2
+      if (!isEdge && Math.random() > 0.35) continue
       const snippet = pickSnippet()
       columns.push({
-        x: i * colWidth,
+        x: i * colWidth + Math.random() * 3 - 1,
         speed: 0.3 + Math.random() * 0.8,
         chars: snippet.split(''),
-        y: -Math.random() * h * 2,
-        opacity: 0.08 + Math.random() * 0.2,
+        y: Math.random() * h * 1.5 - h * 0.25,
+        opacity: 0.18 + Math.random() * 0.25,
         fontSize: 11 + Math.floor(Math.random() * 3),
         lastCharTime: 0,
         charInterval: 40 + Math.random() * 80,
@@ -111,7 +113,7 @@ onMounted(() => {
     lastTime = now
 
     // Fade trail
-    ctx2.fillStyle = 'rgba(8, 14, 24, 0.12)'
+    ctx2.fillStyle = 'rgba(8, 14, 24, 1)'
     ctx2.fillRect(0, 0, w, h)
 
     for (const col of columns) {
@@ -122,7 +124,7 @@ onMounted(() => {
         col.y = -100 - Math.random() * 300
         const snippet = pickSnippet()
         col.chars = snippet.split('')
-        col.opacity = 0.08 + Math.random() * 0.2
+        col.opacity = 0.18 + Math.random() * 0.25
       }
 
       // Draw each character
@@ -149,8 +151,8 @@ onMounted(() => {
           ctx2.shadowBlur = 0
         } else {
           // Green gradient from bright to dim
-          const g = Math.floor(120 + 135 * (1 - distFromLead))
-          ctx2.fillStyle = `rgba(20, ${g}, 50, ${alpha})`
+          const g = Math.floor(150 + 105 * (1 - distFromLead))
+          ctx2.fillStyle = `rgba(20, ${g}, 60, ${alpha})`
           ctx2.font = `${col.fontSize}px "JetBrains Mono", "Fira Code", monospace`
           ctx2.fillText(char, col.x, charY)
         }
@@ -162,7 +164,7 @@ onMounted(() => {
       const flashCol = columns[Math.floor(Math.random() * columns.length)]
       if (flashCol) {
         const flashY = flashCol.y - 20
-        ctx2.fillStyle = 'rgba(34, 197, 94, 0.08)'
+        ctx2.fillStyle = 'rgba(34, 197, 94, 0.12)'
         ctx2.fillRect(flashCol.x - 4, flashY - 30, colWidth + 8, 60)
       }
     }

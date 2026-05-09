@@ -246,8 +246,7 @@ onMounted(() => loadApps())
 <style scoped>
 .home-page {
   position: relative;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 /* ============================================
@@ -257,8 +256,10 @@ onMounted(() => loadApps())
   position: relative;
   z-index: 1;
   text-align: center;
-  padding: var(--space-16) 0 var(--space-12);
+  padding: var(--space-16) var(--space-6) var(--space-12);
   overflow: hidden;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .hero-glow {
@@ -427,7 +428,9 @@ onMounted(() => loadApps())
 .features-section {
   position: relative;
   z-index: 1;
-  padding: var(--space-12) 0;
+  padding: var(--space-12) var(--space-6);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .features-grid {
@@ -485,7 +488,9 @@ onMounted(() => loadApps())
 .apps-section {
   position: relative;
   z-index: 1;
-  padding: var(--space-8) 0 var(--space-16);
+  padding: var(--space-8) var(--space-6) var(--space-16);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .section-header {
