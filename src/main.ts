@@ -11,8 +11,14 @@ import 'ant-design-vue/dist/reset.css'
 
 const app = createApp(App)
 
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
 app.use(router)
 app.use(Antd)
+
+// Initialize theme before mount to prevent flash
+import { useThemeStore } from '@/stores/themeStore'
+const themeStore = useThemeStore(pinia)
+themeStore.initTheme()
 
 app.mount('#app')

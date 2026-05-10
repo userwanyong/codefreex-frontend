@@ -52,9 +52,12 @@ onMounted(() => loadInvites())
 </script>
 
 <template>
-  <div class="admin-invite-page">
+  <div class="admin-page">
     <div class="page-header">
-      <h2>邀请码管理</h2>
+      <div>
+        <h1 class="page-title">邀请码管理</h1>
+        <p class="page-desc">查看和管理平台所有邀请码</p>
+      </div>
     </div>
 
     <div class="filter-bar">
@@ -62,7 +65,7 @@ onMounted(() => loadInvites())
         v-model:value="filterStatus"
         placeholder="筛选状态"
         allow-clear
-        style="width: 150px"
+        class="filter-select"
         @change="handleSearch"
       >
         <a-select-option v-for="(v, k) in statusMap" :key="k" :value="k">{{ v.text }}</a-select-option>
@@ -79,7 +82,7 @@ onMounted(() => loadInvites())
           </a-tag>
         </template>
       </a-table-column>
-      <a-table-column title="创建者ID" data-index="userId" width="120" ellipsis />
+      <a-table-column title="创建者ID" data-index="userId" width="140" ellipsis />
       <a-table-column title="使用次数" width="100">
         <template #default="{ record }">
           <span>{{ record.usedCount ?? 0 }} / {{ record.maxUseCount ?? 1 }}</span>
@@ -102,20 +105,37 @@ onMounted(() => loadInvites())
 </template>
 
 <style scoped>
-.page-header {
-  margin-bottom: 24px;
+.admin-page {
+  padding-top: 4px;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
+.page-header {
+  margin-bottom: 28px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
   color: var(--text-primary);
+  margin: 0 0 4px;
+  letter-spacing: -0.3px;
+}
+
+.page-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .filter-bar {
   display: flex;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.filter-select {
+  width: 150px;
 }
 
 .pagination-wrapper {

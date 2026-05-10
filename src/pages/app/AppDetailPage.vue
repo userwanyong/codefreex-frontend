@@ -46,7 +46,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   disabled: { label: '已禁用', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.15)' },
 }
 
-const gradients = [
+const darkGradients = [
   'linear-gradient(135deg, #065F46 0%, #064E3B 100%)',
   'linear-gradient(135deg, #1E3A5F 0%, #1E293B 100%)',
   'linear-gradient(135deg, #4C1D95 0%, #2D1B69 100%)',
@@ -55,9 +55,20 @@ const gradients = [
   'linear-gradient(135deg, #4C1D95 0%, #065F46 100%)',
 ]
 
+const lightGradients = [
+  'linear-gradient(135deg, #A7F3D0 0%, #6EE7B7 100%)',
+  'linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%)',
+  'linear-gradient(135deg, #DDD6FE 0%, #C4B5FD 100%)',
+  'linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%)',
+  'linear-gradient(135deg, #A7F3D0 0%, #BFDBFE 100%)',
+  'linear-gradient(135deg, #DDD6FE 0%, #A7F3D0 100%)',
+]
+
 function getGradient(name: string) {
   const hash = (name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-  return gradients[hash % gradients.length]
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+  const list = isLight ? lightGradients : darkGradients
+  return list[hash % list.length]
 }
 
 async function loadApp() {
@@ -355,7 +366,7 @@ onMounted(() => loadApp())
 .cover-letter {
   font-size: 64px;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.12);
+  color: var(--watermark-color);
   font-family: var(--font-mono);
   position: relative;
   z-index: 1;

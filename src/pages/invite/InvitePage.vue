@@ -3,13 +3,12 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { CopyOutlined, PlusOutlined } from '@ant-design/icons-vue'
-import { generateInvite, getMyInvites, getMyInviter } from '@/api/inviteController'
+import { generateInvite, getMyInvites } from '@/api/inviteController'
 import { parseResponseData } from '@/utils/response'
 
 const router = useRouter()
 const loading = ref(false)
 const invites = ref<API.Invite[]>([])
-const inviter = ref<API.UserInfo | null>(null)
 const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
@@ -42,17 +41,6 @@ async function loadInvites() {
     // ignore
   } finally {
     loading.value = false
-  }
-}
-
-async function loadInviter() {
-  try {
-    const res = await getMyInviter()
-    if (res.data?.code === 0 && res.data.data) {
-      inviter.value = parseResponseData<API.UserInfo>(res.data.data)
-    }
-  } catch {
-    // ignore
   }
 }
 
@@ -91,7 +79,6 @@ function handlePageChange(page: number) {
 
 onMounted(() => {
   loadInvites()
-  loadInviter()
 })
 </script>
 
@@ -103,10 +90,6 @@ onMounted(() => {
         <PlusOutlined /> 生成邀请码
       </a-button>
     </div>
-
-    <a-card v-if="inviter" class="inviter-card" size="small">
-      <span>我的邀请人：{{ inviter.userId || '-' }}</span>
-    </a-card>
 
     <a-table
       :data-source="invites"
@@ -176,6 +159,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.invite-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -187,13 +175,6 @@ onMounted(() => {
   margin: 0;
   font-size: 20px;
   color: var(--text-primary);
-}
-
-.inviter-card {
-  margin-bottom: 16px;
-  background: var(--bg-elevated) !important;
-  border: 1px solid var(--glass-border) !important;
-  color: var(--text-primary) !important;
 }
 
 .copy-icon {

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { StarOutlined, StarFilled } from '@ant-design/icons-vue'
+import { useRouter } from 'vue-router'
+import { StarOutlined, StarFilled, RocketOutlined } from '@ant-design/icons-vue'
 import { getAdminApps, setAppFeatured } from '@/api/appController'
 import { parseResponseData } from '@/utils/response'
 
+const router = useRouter()
 const apps = ref<API.AppVO[]>([])
 const loading = ref(true)
 const pageNum = ref(1)
@@ -71,23 +73,26 @@ onMounted(() => loadApps())
 </script>
 
 <template>
-  <div class="admin-app-page">
+  <div class="admin-page">
     <div class="page-header">
-      <h2>应用管理</h2>
+      <div>
+        <h1 class="page-title">应用管理</h1>
+        <p class="page-desc">管理平台所有应用，设置精选推荐</p>
+      </div>
     </div>
 
     <div class="filter-bar">
       <a-input
         v-model:value="filterName"
         placeholder="搜索应用名称"
-        style="width: 200px"
+        class="filter-input"
         @press-enter="handleSearch"
       />
       <a-select
         v-model:value="filterStatus"
         placeholder="筛选状态"
         allow-clear
-        style="width: 150px"
+        class="filter-select"
         @change="handleSearch"
       >
         <a-select-option v-for="(v, k) in statusMap" :key="k" :value="k">{{ v.text }}</a-select-option>
@@ -98,7 +103,7 @@ onMounted(() => loadApps())
     <a-table :data-source="apps" :loading="loading" :pagination="false" row-key="id">
       <a-table-column title="应用名称" data-index="appName" ellipsis>
         <template #default="{ record }">
-          <span>{{ record.appName || '未命名应用' }}</span>
+          <span class="cell-name">{{ record.appName || '未命名应用' }}</span>
         </template>
       </a-table-column>
       <a-table-column title="状态" data-index="status" width="100">
@@ -108,23 +113,33 @@ onMounted(() => loadApps())
           </a-tag>
         </template>
       </a-table-column>
-      <a-table-column title="作者ID" data-index="userId" width="120" ellipsis />
+      <a-table-column title="作者ID" data-index="userId" width="140" ellipsis />
       <a-table-column title="浏览" data-index="viewCount" width="80" />
       <a-table-column title="点赞" data-index="likeCount" width="80" />
       <a-table-column title="创建时间" data-index="createTime" width="180" />
-      <a-table-column title="操作" width="120">
+      <a-table-column title="操作" width="160">
         <template #default="{ record }">
-          <a-button
-            type="link"
-            size="small"
-            @click="toggleFeatured(record)"
-          >
-            <template #icon>
-              <StarFilled v-if="record.isFeatured === 1" style="color: #faad14" />
-              <StarOutlined v-else />
-            </template>
-            {{ record.isFeatured === 1 ? '取消精选' : '设为精选' }}
-          </a-button>
+          <a-space>
+            <a-button
+              type="link"
+              size="small"
+              @click.stop="router.push(`/app/${record.id}`)"
+            >
+              <template #icon><RocketOutlined /></template>
+              查看详情
+            </a-button>
+            <a-button
+              type="link"
+              size="small"
+              @click.stop="toggleFeatured(record)"
+            >
+              <template #icon>
+                <StarFilled v-if="record.isFeatured === 1" style="color: #faad14" />
+                <StarOutlined v-else />
+              </template>
+              {{ record.isFeatured === 1 ? '取消精选' : '设为精选' }}
+            </a-button>
+          </a-space>
         </template>
       </a-table-column>
     </a-table>
@@ -142,20 +157,45 @@ onMounted(() => loadApps())
 </template>
 
 <style scoped>
-.page-header {
-  margin-bottom: 24px;
+.admin-page {
+  padding-top: 4px;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
+.page-header {
+  margin-bottom: 28px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
   color: var(--text-primary);
+  margin: 0 0 4px;
+  letter-spacing: -0.3px;
+}
+
+.page-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .filter-bar {
   display: flex;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.filter-input {
+  width: 220px;
+}
+
+.filter-select {
+  width: 150px;
+}
+
+.cell-name {
+  font-weight: 500;
 }
 
 .pagination-wrapper {

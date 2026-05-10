@@ -42,16 +42,28 @@ const statusLabels: Record<string, string> = {
 }
 
 function getAppGradient(name: string) {
-  const gradients = [
-    'linear-gradient(135deg, #065F46 0%, #064E3B 100%)',
-    'linear-gradient(135deg, #1E3A5F 0%, #1E293B 100%)',
-    'linear-gradient(135deg, #4C1D95 0%, #2D1B69 100%)',
-    'linear-gradient(135deg, #92400E 0%, #78350F 100%)',
-    'linear-gradient(135deg, #991B1B 0%, #7F1D1D 100%)',
-    'linear-gradient(135deg, #065F46 0%, #1E3A5F 100%)',
-    'linear-gradient(135deg, #4C1D95 0%, #065F46 100%)',
-    'linear-gradient(135deg, #1E3A5F 0%, #4C1D95 100%)',
-  ]
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+  const gradients = isLight
+    ? [
+        'linear-gradient(135deg, #A7F3D0 0%, #6EE7B7 100%)',
+        'linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%)',
+        'linear-gradient(135deg, #DDD6FE 0%, #C4B5FD 100%)',
+        'linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%)',
+        'linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%)',
+        'linear-gradient(135deg, #A7F3D0 0%, #BFDBFE 100%)',
+        'linear-gradient(135deg, #DDD6FE 0%, #A7F3D0 100%)',
+        'linear-gradient(135deg, #BFDBFE 0%, #DDD6FE 100%)',
+      ]
+    : [
+        'linear-gradient(135deg, #065F46 0%, #064E3B 100%)',
+        'linear-gradient(135deg, #1E3A5F 0%, #1E293B 100%)',
+        'linear-gradient(135deg, #4C1D95 0%, #2D1B69 100%)',
+        'linear-gradient(135deg, #92400E 0%, #78350F 100%)',
+        'linear-gradient(135deg, #991B1B 0%, #7F1D1D 100%)',
+        'linear-gradient(135deg, #065F46 0%, #1E3A5F 100%)',
+        'linear-gradient(135deg, #4C1D95 0%, #065F46 100%)',
+        'linear-gradient(135deg, #1E3A5F 0%, #4C1D95 100%)',
+      ]
   const hash = (name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)
   return gradients[hash % gradients.length]
 }
@@ -611,7 +623,7 @@ onMounted(() => loadApps())
 .cover-letter {
   font-size: 48px;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.15);
+  color: var(--watermark-color);
   font-family: var(--font-mono);
 }
 

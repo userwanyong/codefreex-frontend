@@ -13,6 +13,9 @@ import {
   MenuOutlined,
   CloseOutlined,
 } from '@ant-design/icons-vue'
+import { useThemeStore } from '@/stores/themeStore'
+
+const themeStore = useThemeStore()
 
 const router = useRouter()
 const route = useRoute()
@@ -100,6 +103,10 @@ function navigate(path: string) {
 
         <!-- Right side -->
         <div class="nav-right">
+          <button class="theme-toggle" @click="themeStore.toggleTheme()" :title="themeStore.isDark ? '切换亮色' : '切换暗色'">
+            <svg v-if="themeStore.isDark" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
           <template v-if="userStore.isLoggedIn">
             <a-button type="primary" class="create-btn" @click="router.push('/')">
               + 新建应用
@@ -196,7 +203,7 @@ function navigate(path: string) {
   z-index: 50;
   padding: 0 var(--space-6);
   transition: all var(--duration-normal) var(--ease-out);
-  background: rgba(11, 15, 26, 0.6);
+  background: var(--nav-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid transparent;
@@ -204,11 +211,11 @@ function navigate(path: string) {
 
 .nav-header.scrolled {
   border-bottom-color: var(--glass-border);
-  background: rgba(11, 15, 26, 0.85);
+  background: var(--nav-bg-scrolled);
 }
 
 .nav-header.nav-transparent {
-  background: rgba(11, 15, 26, 0.25);
+  background: var(--nav-bg-transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom-color: transparent;
@@ -335,6 +342,26 @@ function navigate(path: string) {
   font-size: 18px;
 }
 
+/* Theme toggle */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.theme-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
 /* ============================================
    Mobile Menu
    ============================================ */
@@ -345,7 +372,7 @@ function navigate(path: string) {
   left: 0;
   right: 0;
   z-index: 49;
-  background: rgba(11, 15, 26, 0.95);
+  background: var(--mobile-menu-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--glass-border);

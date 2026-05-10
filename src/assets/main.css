@@ -253,7 +253,7 @@
 }
 
 .ant-table-tbody > tr:nth-child(even) > td {
-  background: rgba(255, 255, 255, 0.02) !important;
+  background: var(--row-alt) !important;
 }
 
 .ant-table-tbody > tr:nth-child(even):hover > td {

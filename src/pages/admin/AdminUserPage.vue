@@ -5,11 +5,11 @@ const userStore = useUserStore()
 </script>
 
 <template>
-  <div class="admin-user-page">
+  <div class="admin-page">
     <div class="page-header">
       <div>
-        <h2>用户管理</h2>
-        <p>当前前端已接好管理入口，但后端尚未提供用户列表、用户编辑与密码管理接口。</p>
+        <h1 class="page-title">用户管理</h1>
+        <p class="page-desc">管理平台用户信息与权限</p>
       </div>
     </div>
 
@@ -18,43 +18,102 @@ const userStore = useUserStore()
       show-icon
       message="接口阻塞"
       description="要完整满足 F1 的管理员用户管理验收项，还需要后端补充用户列表、详情和编辑接口。"
+      class="alert-box"
     />
 
-    <a-card class="fallback-card" title="当前登录管理员">
-      <a-descriptions :column="1" bordered size="small">
-        <a-descriptions-item label="用户 ID">
-          {{ userStore.loginUser?.userId || '-' }}
-        </a-descriptions-item>
-        <a-descriptions-item label="用户名">
-          {{ userStore.loginUser?.username || '-' }}
-        </a-descriptions-item>
-        <a-descriptions-item label="邮箱">
-          {{ userStore.loginUser?.email || '-' }}
-        </a-descriptions-item>
-        <a-descriptions-item label="角色">
-          {{ userStore.roles.join(', ') || '-' }}
-        </a-descriptions-item>
-      </a-descriptions>
-    </a-card>
+    <div class="info-card">
+      <h3 class="info-title">当前登录管理员</h3>
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="info-label">用户 ID</span>
+          <span class="info-value">{{ userStore.loginUser?.userId || '-' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">用户名</span>
+          <span class="info-value">{{ userStore.loginUser?.username || '-' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">邮箱</span>
+          <span class="info-value">{{ userStore.loginUser?.email || '-' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">角色</span>
+          <span class="info-value">{{ userStore.roles.join(', ') || '-' }}</span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.admin-page {
+  padding-top: 4px;
+}
+
 .page-header {
+  margin-bottom: 28px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  letter-spacing: -0.3px;
+}
+
+.page-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.alert-box {
   margin-bottom: 20px;
 }
 
-.page-header h2 {
-  margin: 0 0 8px;
-  font-size: 24px;
+.info-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
 }
 
-.page-header p {
-  margin: 0;
-  color: var(--text-secondary);
+.info-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px;
 }
 
-.fallback-card {
-  margin-top: 20px;
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.info-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

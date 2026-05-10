@@ -4,6 +4,10 @@ import { ref, onMounted, onUnmounted } from 'vue'
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 let animId = 0
 
+function isDarkMode(): boolean {
+  return document.documentElement.getAttribute('data-theme') !== 'light'
+}
+
 onMounted(() => {
   const canvas = canvasRef.value
   if (!canvas) return
@@ -112,8 +116,22 @@ onMounted(() => {
     const dt = now - lastTime
     lastTime = now
 
+    const dark = isDarkMode()
+
+    // Theme colors
+    const bgFill = dark ? 'rgba(8, 14, 24, 1)' : 'rgba(248, 250, 252, 1)'
+    const charR = dark ? 20 : 20
+    const charGMin = dark ? 150 : 180
+    const charGMax = dark ? 255 : 220
+    const charB = dark ? 60 : 80
+    const headR = dark ? 34 : 22
+    const headG = dark ? 197 : 163
+    const headB = dark ? 94 : 74
+    const headGlowColor = dark ? 'rgba(34, 197, 94, 0.3)' : 'rgba(22, 163, 74, 0.2)'
+    const flashColor = dark ? 'rgba(34, 197, 94, 0.12)' : 'rgba(22, 163, 74, 0.06)'
+
     // Fade trail
-    ctx2.fillStyle = 'rgba(8, 14, 24, 1)'
+    ctx2.fillStyle = bgFill
     ctx2.fillRect(0, 0, w, h)
 
     for (const col of columns) {
@@ -141,18 +159,18 @@ onMounted(() => {
 
         // Head glow
         if (i === col.chars.length - 1) {
-          ctx2.fillStyle = `rgba(34, 197, 94, ${alpha * 3})`
+          ctx2.fillStyle = `rgba(${headR}, ${headG}, ${headB}, ${alpha * 3})`
           ctx2.font = `${col.fontSize}px "JetBrains Mono", "Fira Code", monospace`
           ctx2.fillText(char, col.x, charY)
           // Glow
-          ctx2.shadowColor = 'rgba(34, 197, 94, 0.3)'
+          ctx2.shadowColor = headGlowColor
           ctx2.shadowBlur = 8
           ctx2.fillText(char, col.x, charY)
           ctx2.shadowBlur = 0
         } else {
-          // Green gradient from bright to dim
-          const g = Math.floor(150 + 105 * (1 - distFromLead))
-          ctx2.fillStyle = `rgba(20, ${g}, 60, ${alpha})`
+          // Gradient from bright to dim
+          const g = Math.floor(charGMin + (charGMax - charGMin) * (1 - distFromLead))
+          ctx2.fillStyle = `rgba(${charR}, ${g}, ${charB}, ${alpha})`
           ctx2.font = `${col.fontSize}px "JetBrains Mono", "Fira Code", monospace`
           ctx2.fillText(char, col.x, charY)
         }
@@ -164,7 +182,7 @@ onMounted(() => {
       const flashCol = columns[Math.floor(Math.random() * columns.length)]
       if (flashCol) {
         const flashY = flashCol.y - 20
-        ctx2.fillStyle = 'rgba(34, 197, 94, 0.12)'
+        ctx2.fillStyle = flashColor
         ctx2.fillRect(flashCol.x - 4, flashY - 30, colWidth + 8, 60)
       }
     }
@@ -173,7 +191,7 @@ onMounted(() => {
   }
 
   // Initial clear
-  ctx2.fillStyle = 'rgba(8, 14, 24, 1)'
+  ctx2.fillStyle = isDarkMode() ? 'rgba(8, 14, 24, 1)' : 'rgba(248, 250, 252, 1)'
   ctx2.fillRect(0, 0, w, h)
 
   draw()

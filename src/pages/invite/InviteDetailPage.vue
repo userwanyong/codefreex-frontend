@@ -50,6 +50,11 @@ onMounted(() => loadUsers())
 </template>
 
 <style scoped>
+.invite-detail-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .page-header {
   margin-bottom: 24px;
 }
@@ -57,5 +62,6 @@ onMounted(() => loadUsers())
 .page-header h2 {
   margin: 0;
   font-size: 20px;
+  color: var(--text-primary);
 }
 </style>

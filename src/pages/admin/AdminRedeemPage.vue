@@ -104,9 +104,12 @@ onMounted(() => loadRedeems())
 </script>
 
 <template>
-  <div class="admin-redeem-page">
+  <div class="admin-page">
     <div class="page-header">
-      <h2>兑换码管理</h2>
+      <div>
+        <h1 class="page-title">兑换码管理</h1>
+        <p class="page-desc">生成与管理兑换码，查看使用详情</p>
+      </div>
       <a-button type="primary" @click="generateModalVisible = true">
         <PlusOutlined /> 生成兑换码
       </a-button>
@@ -117,7 +120,7 @@ onMounted(() => loadRedeems())
         v-model:value="filterStatus"
         placeholder="筛选状态"
         allow-clear
-        style="width: 150px"
+        class="filter-select"
         @change="handleSearch"
       >
         <a-select-option v-for="(v, k) in statusMap" :key="k" :value="k">{{ v.text }}</a-select-option>
@@ -160,7 +163,6 @@ onMounted(() => loadRedeems())
       />
     </div>
 
-    <!-- 生成兑换码弹窗 -->
     <a-modal
       v-model:open="generateModalVisible"
       title="生成兑换码"
@@ -216,23 +218,40 @@ onMounted(() => loadRedeems())
 </template>
 
 <style scoped>
+.admin-page {
+  padding-top: 4px;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  align-items: flex-start;
+  margin-bottom: 28px;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
   color: var(--text-primary);
+  margin: 0 0 4px;
+  letter-spacing: -0.3px;
+}
+
+.page-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .filter-bar {
   display: flex;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.filter-select {
+  width: 150px;
 }
 
 .pagination-wrapper {

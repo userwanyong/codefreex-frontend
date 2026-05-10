@@ -549,7 +549,7 @@ onUnmounted(() => currentEventSource?.close())
 .switch-btn.active {
   background: var(--bg-surface);
   color: var(--accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-sm);
 }
 
 .switch-btn:disabled {
@@ -700,7 +700,7 @@ onUnmounted(() => currentEventSource?.close())
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
-.msg-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1); }
+.msg-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--shadow-sm); }
 .msg-input::placeholder { color: var(--text-muted); }
 .msg-input:disabled { opacity: 0.5; pointer-events: none; }
 
@@ -724,10 +724,10 @@ onUnmounted(() => currentEventSource?.close())
   background: linear-gradient(135deg, #22c55e, #16a34a);
   color: white;
   cursor: pointer;
-  box-shadow: 0 2px 12px rgba(34, 197, 94, 0.35), 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
-.send-btn.active:hover { transform: scale(1.06); box-shadow: 0 4px 20px rgba(34, 197, 94, 0.45); }
+.send-btn.active:hover { transform: scale(1.06); box-shadow: var(--shadow-lg); }
 
 /* ============================================
    Preview Panel (Right)
@@ -833,7 +833,7 @@ onUnmounted(() => currentEventSource?.close())
 .step.active .step-dot {
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.35);
+  box-shadow: var(--shadow-sm);
 }
 
 .step-line {

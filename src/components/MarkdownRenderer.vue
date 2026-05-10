@@ -123,8 +123,8 @@ function handleCopy(e: MouseEvent) {
   margin: 12px 0;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: #0d1117;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--code-bg);
+  border: 1px solid var(--glass-border);
 }
 
 .markdown-body :deep(.code-header) {
@@ -132,8 +132,8 @@ function handleCopy(e: MouseEvent) {
   align-items: center;
   justify-content: space-between;
   padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
 }
 
 .markdown-body :deep(.code-lang) {
@@ -147,7 +147,7 @@ function handleCopy(e: MouseEvent) {
   font-size: 12px;
   color: var(--text-muted);
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   padding: 2px 10px;
   cursor: pointer;
@@ -157,8 +157,8 @@ function handleCopy(e: MouseEvent) {
 
 .markdown-body :deep(.copy-btn:hover) {
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--glass-border);
+  background: var(--bg-elevated);
 }
 
 .markdown-body :deep(pre) {

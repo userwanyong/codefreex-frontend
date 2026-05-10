@@ -468,12 +468,12 @@ function getIconColor(name: string): string {
 .code-content-wrapper {
   flex: 1;
   overflow: auto;
-  background: #0d1117;
+  background: var(--code-bg);
 }
 
 .code-content-wrapper::-webkit-scrollbar { width: 6px; height: 6px; }
 .code-content-wrapper::-webkit-scrollbar-track { background: transparent; }
-.code-content-wrapper::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+.code-content-wrapper::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 .code-with-lines {
   margin: 0;
@@ -507,11 +507,11 @@ function getIconColor(name: string): string {
   padding-right: 10px;
   height: 14px;
   line-height: 14px;
-  color: #484f58;
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 12px;
   user-select: none;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--border);
 }
 
 /* ============ 空状态 ============ */
