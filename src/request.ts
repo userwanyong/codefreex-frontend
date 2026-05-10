@@ -31,7 +31,7 @@ myAxios.interceptors.response.use(
       ) {
         message.warning('请先登录')
         localStorage.removeItem('codefreex_token')
-        window.location.href = `/login?redirect=${encodeURIComponent(window.location.href)}`
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`
       }
     } else if (data.code === 40101) {
       message.error(data.message || '无权限访问')

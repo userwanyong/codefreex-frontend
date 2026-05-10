@@ -67,3 +67,27 @@ export async function setAppFeatured(appId: string, featured: number) {
     params: { appId, featured },
   })
 }
+
+/** 部署应用 */
+export async function deployApp(appId: string) {
+  return request<API.BaseResponse<API.AppDeployResponse>>('/app/deploy', {
+    method: 'POST',
+    params: { appId },
+  })
+}
+
+/** 取消部署 */
+export async function cancelDeploy(appId: string) {
+  return request<API.BaseResponse<boolean>>('/app/deploy/cancel', {
+    method: 'POST',
+    params: { appId },
+  })
+}
+
+/** 下载应用源码 */
+export async function downloadApp(appId: string) {
+  return request<BlobPart>(`/app/download/${appId}`, {
+    method: 'GET',
+    responseType: 'blob',
+  })
+}

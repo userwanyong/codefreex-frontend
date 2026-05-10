@@ -19,7 +19,7 @@ const router = useRouter()
 const apps = ref<API.AppVO[]>([])
 const loading = ref(true)
 const pageNum = ref(1)
-const pageSize = ref(12)
+const pageSize = ref(8)
 const total = ref(0)
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -424,6 +424,22 @@ onMounted(() => loadApps())
 
 .action-edit:hover {
   background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.action-deploy {
+  color: #3B82F6 !important;
+}
+
+.action-deploy:hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.action-download {
+  color: #22C55E !important;
+}
+
+.action-download:hover {
+  background: rgba(34, 197, 94, 0.1) !important;
 }
 
 .action-delete {

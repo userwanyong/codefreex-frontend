@@ -18,8 +18,11 @@ import {
   FileTextOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  DownloadOutlined,
+  LinkOutlined,
+  StopOutlined,
 } from '@ant-design/icons-vue'
-import { getApp, editApp, deleteApp } from '@/api/appController'
+import { getApp, editApp, deleteApp, deployApp, cancelDeploy, downloadApp } from '@/api/appController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
 
@@ -29,14 +32,24 @@ const userStore = useUserStore()
 const app = ref<API.AppVO | null>(null)
 const loading = ref(true)
 const editModalVisible = ref(false)
-const editForm = ref({ appName: '', description: '', tags: [] as string[] })
+const editForm = ref({ appName: '', description: '', tags: [] as string[], isPublic: 0 })
+const deploying = ref(false)
+
+const canDeploy = computed(() => {
+  if (!app.value) return false
+  return app.value.status === 'generated' || app.value.status === 'deployed'
+})
+
+const deployedUrl = computed(() => {
+  return app.value?.deployKey ? `/api/deploy/${app.value.deployKey}/` : ''
+})
 
 const appId = computed(() => {
   const param = route.params.appId
   return Array.isArray(param) ? param[0] : param
 })
 
-const isOwner = computed(() => app.value?.userId === userStore.loginUser?.userId)
+const isOwner = computed(() => String(app.value?.userId) === String(userStore.loginUser?.userId))
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   draft: { label: '草稿', color: '#64748B', bg: 'rgba(100, 116, 139, 0.15)' },
@@ -92,6 +105,7 @@ function openEditModal() {
     appName: app.value.appName || '',
     description: app.value.description || '',
     tags: app.value.tags || [],
+    isPublic: app.value.isPublic ?? 0,
   }
   editModalVisible.value = true
 }
@@ -104,6 +118,7 @@ async function handleEdit() {
       appName: editForm.value.appName,
       description: editForm.value.description,
       tags: editForm.value.tags,
+      isPublic: editForm.value.isPublic,
     })
     if (res.data?.code === 0) {
       message.success('编辑成功')
@@ -140,6 +155,68 @@ function handleDelete() {
   })
 }
 
+async function handleDeploy() {
+  if (deploying.value || !app.value?.id) return
+  deploying.value = true
+  try {
+    const res = await deployApp(app.value.id)
+    if (res.data?.code === 0 && res.data.data) {
+      const deployData = parseResponseData<API.AppDeployResponse>(res.data.data)
+      if (deployData.deployKey) {
+        app.value = { ...app.value!, deployKey: deployData.deployKey }
+      }
+      message.success('部署成功')
+      loadApp()
+    } else {
+      message.error((res.data as { message?: string })?.message || '部署失败')
+    }
+  } catch {
+    message.error('部署失败，请稍后重试')
+  } finally {
+    deploying.value = false
+  }
+}
+
+async function handleDownload() {
+  if (!app.value?.id) return
+  try {
+    const res = await downloadApp(app.value.id)
+    const blob = new Blob([res.data as BlobPart], { type: 'application/zip' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${app.value.appName || 'app'}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+    message.success('下载已开始')
+  } catch {
+    message.error('下载失败，请稍后重试')
+  }
+}
+
+function handleCancelDeploy() {
+  if (!app.value?.id) return
+  Modal.confirm({
+    title: '取消部署',
+    content: '取消后应用将不再对外访问，确认取消部署吗？',
+    okText: '确认',
+    cancelText: '返回',
+    async onOk() {
+      try {
+        const res = await cancelDeploy(app.value!.id!)
+        if (res.data?.code === 0) {
+          message.success('已取消部署')
+          loadApp()
+        } else {
+          message.error(res.data?.message || '取消失败')
+        }
+      } catch {
+        message.error('取消失败')
+      }
+    },
+  })
+}
+
 onMounted(() => loadApp())
 </script>
 
@@ -164,28 +241,24 @@ onMounted(() => loadApp())
             <!-- App Identity -->
             <div class="sidebar-identity">
               <h1 class="app-name">{{ app.appName || '未命名应用' }}</h1>
-              <div
-                class="status-badge"
-                :style="{
-                  color: statusConfig[app.status || 'draft']?.color,
-                  background: statusConfig[app.status || 'draft']?.bg,
-                }"
-              >
-                {{ statusConfig[app.status || 'draft']?.label }}
+              <div class="badges-row">
+                <span
+                  class="status-badge"
+                  :style="{
+                    color: statusConfig[app.status || 'draft']?.color,
+                    background: statusConfig[app.status || 'draft']?.bg,
+                  }"
+                >
+                  {{ statusConfig[app.status || 'draft']?.label }}
+                </span>
+                <span class="stat-badge">
+                  <EyeOutlined /> {{ app.viewCount ?? 0 }}
+                </span>
+                <span class="stat-badge">
+                  <LikeOutlined /> {{ app.likeCount ?? 0 }}
+                </span>
               </div>
               <p class="app-desc">{{ app.description || '暂无描述' }}</p>
-            </div>
-
-            <!-- Quick Stats -->
-            <div class="stats-row">
-              <div class="stat-item">
-                <EyeOutlined />
-                <span>{{ app.viewCount ?? 0 }}</span>
-              </div>
-              <div class="stat-item">
-                <LikeOutlined />
-                <span>{{ app.likeCount ?? 0 }}</span>
-              </div>
             </div>
 
             <!-- Divider -->
@@ -234,6 +307,45 @@ onMounted(() => loadApp())
                 <MessageOutlined />
                 AI 工作台
               </a-button>
+              <div v-if="app?.status === 'deployed'" class="action-row">
+                <a-button
+                  class="action-deploy-row"
+                  :loading="deploying"
+                  @click="handleDeploy"
+                >
+                  <GlobalOutlined />
+                  重新部署
+                </a-button>
+                <a-button class="action-danger" @click="handleCancelDeploy">
+                  <StopOutlined />
+                  取消部署
+                </a-button>
+              </div>
+              <a-button
+                v-else-if="canDeploy"
+                block
+                class="action-deploy"
+                :loading="deploying"
+                @click="handleDeploy"
+              >
+                <GlobalOutlined />
+                部署应用
+              </a-button>
+              <div class="action-row">
+                <a-button class="action-secondary" @click="handleDownload" style="flex:1">
+                  <DownloadOutlined />
+                  下载
+                </a-button>
+              </div>
+              <div v-if="app?.status === 'deployed' && deployedUrl" class="action-row">
+                <a-button class="action-link" style="flex:1">
+                  <a :href="deployedUrl" target="_blank" class="link-inner">
+                    <LinkOutlined />
+                    访问部署地址
+                  </a>
+                </a-button>
+              </div>
+              <div class="sidebar-divider" />
               <div class="action-row">
                 <a-button class="action-secondary" @click="openEditModal">
                   <EditOutlined />
@@ -298,6 +410,15 @@ onMounted(() => loadApp())
         </a-form-item>
         <a-form-item label="标签">
           <a-select v-model:value="editForm.tags" mode="tags" placeholder="输入标签后回车" />
+        </a-form-item>
+        <a-form-item label="是否公开">
+          <a-switch
+            :checked="editForm.isPublic === 1"
+            @change="(val: boolean) => editForm.isPublic = val ? 1 : 0"
+          />
+          <span style="margin-left: 8px; color: var(--text-muted); font-size: 13px">
+            {{ editForm.isPublic === 1 ? '公开可见' : '仅自己可见' }}
+          </span>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -389,11 +510,25 @@ onMounted(() => loadApp())
 
 .status-badge {
   display: inline-block;
-  padding: 3px 12px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
+}
+
+.badges-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin-bottom: var(--space-3);
+}
+
+.stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .app-desc {
@@ -401,30 +536,6 @@ onMounted(() => loadApp())
   color: var(--text-secondary);
   line-height: 1.6;
   margin: 0;
-}
-
-/* Stats row */
-.stats-row {
-  display: flex;
-  gap: var(--space-1);
-  padding: 0 var(--space-6);
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-2) var(--space-4);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--text-secondary);
-  flex: 1;
-}
-
-.stat-item :deep(.anticon) {
-  color: var(--text-muted);
-  font-size: 14px;
 }
 
 /* Divider */
@@ -508,10 +619,13 @@ onMounted(() => loadApp())
   height: 36px;
   border-radius: var(--radius-md) !important;
   font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
+}
+
+.action-secondary span,
+.action-danger span,
+.action-deploy-row span,
+.action-deploy span {
+  gap: 4px !important;
 }
 
 .action-secondary {
@@ -533,6 +647,57 @@ onMounted(() => loadApp())
 
 .action-danger:hover {
   background: rgba(239, 68, 68, 0.18) !important;
+}
+
+.action-deploy-row {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-md) !important;
+  font-weight: 600;
+  font-size: 13px;
+  background: linear-gradient(135deg, #3B82F6, #2563EB) !important;
+  border: none !important;
+  color: white !important;
+}
+
+.action-deploy {
+  height: 42px;
+  border-radius: var(--radius-md) !important;
+  font-weight: 600;
+  font-size: 14px;
+  background: linear-gradient(135deg, #3B82F6, #2563EB) !important;
+  border: none !important;
+  color: white !important;
+}
+
+.action-deploy:hover {
+  opacity: 0.9;
+}
+
+.action-link {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-md) !important;
+  font-size: 13px;
+  padding: 0 !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+}
+
+.link-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: #3B82F6 !important;
+  text-decoration: none;
+  font-size: 13px;
+  width: 100%;
+  height: 100%;
+}
+
+.link-inner:hover {
+  color: #2563EB !important;
 }
 
 /* ============================================

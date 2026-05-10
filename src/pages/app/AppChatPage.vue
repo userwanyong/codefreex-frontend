@@ -13,9 +13,12 @@ import {
   EyeInvisibleOutlined,
   CodeOutlined,
   EyeOutlined,
+  DownloadOutlined,
+  StopOutlined,
+  LinkOutlined,
 } from '@ant-design/icons-vue'
-import { message } from 'ant-design-vue'
-import { getApp } from '@/api/appController'
+import { message, Modal } from 'ant-design-vue'
+import { getApp, deployApp, cancelDeploy, downloadApp } from '@/api/appController'
 import { optimizePrompt, streamChatGenCode, getChatHistory } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import ChatMessage from '@/components/ChatMessage.vue'
@@ -62,6 +65,7 @@ function genId() {
 
 // Preview
 const previewUrl = computed(() => (deployKey.value ? `/api/static/${deployKey.value}/` : ''))
+const deployedUrl = computed(() => (deployKey.value ? `/api/deploy/${deployKey.value}/` : ''))
 const showPreview = ref(true)
 
 // Right panel view: 'code' | 'preview'
@@ -203,29 +207,49 @@ async function sendToAI(text: string) {
   const aiMsg = addMessage('ai', '', 'streaming')
   const aiMsgId = aiMsg.id
 
+  // 用 RAF 批量刷新 SSE 数据，减少 Vue 渲染次数，避免长内容卡顿
+  let buffer = ''
+  let rafId = 0
+  function flushBuffer() {
+    const target = messages.value.find((m) => m.id === aiMsgId)
+    if (target && buffer) { target.content += buffer; buffer = '' }
+    scrollToBottom()
+    rafId = 0
+  }
+
   currentEventSource = streamChatGenCode(appId.value, text, {
     onMessage(event) {
-      const target = messages.value.find((m) => m.id === aiMsgId)
-      if (target && event.type === 'ai_response' && typeof event.data === 'string') {
-        target.content += event.data
-        if ((target.content.length % 150) < 20) scrollToBottom()
+      if (event.type === 'deployKey' && typeof event.data === 'string') {
+        deployKey.value = event.data
+        return
+      }
+      if (event.type === 'ai_r' && typeof event.data === 'string') {
+        buffer += event.data
+        if (!rafId) {
+          rafId = requestAnimationFrame(flushBuffer)
+        }
       }
     },
     onDone() {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
       const target = messages.value.find((m) => m.id === aiMsgId)
+      if (target && buffer) { target.content += buffer; buffer = '' }
       if (target) target.status = 'done'
       sending.value = false
       currentEventSource = null
       appStatus.value = 'generated'
       refreshAppInfo()
       refreshPreview()
-      // 生成完成后切换到预览视图
       rightView.value = 'preview'
       scrollToBottom()
     },
     onError(err) {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
       const target = messages.value.find((m) => m.id === aiMsgId)
-      if (target) { target.status = 'error'; if (!target.content) target.content = '生成中断，请重试' }
+      if (target) {
+        if (buffer) { target.content += buffer; buffer = '' }
+        target.status = 'error'; if (!target.content) target.content = '生成中断，请重试'
+      }
       sending.value = false
       currentEventSource = null
     },
@@ -287,6 +311,73 @@ async function refreshAppInfo() {
 }
 const previewKey = ref(0)
 
+// Deploy state
+const deploying = ref(false)
+
+const canDeploy = computed(() => {
+  return appStatus.value === 'generated' || appStatus.value === 'deployed'
+})
+
+async function handleDeploy() {
+  if (deploying.value || !appId.value) return
+  deploying.value = true
+  try {
+    const res = await deployApp(appId.value)
+    if (res.data?.code === 0 && res.data.data) {
+      const data = parseResponseData<API.AppDeployResponse>(res.data.data)
+      if (data.deployKey) deployKey.value = data.deployKey
+      appStatus.value = 'deployed'
+      message.success('部署成功')
+    } else {
+      message.error((res.data as { message?: string })?.message || '部署失败')
+    }
+  } catch {
+    message.error('部署失败，请稍后重试')
+  } finally {
+    deploying.value = false
+  }
+}
+
+function handleCancelDeploy() {
+  if (!appId.value) return
+  Modal.confirm({
+    title: '取消部署',
+    content: '取消后应用将不再对外访问，确认取消部署吗？',
+    okText: '确认',
+    cancelText: '返回',
+    async onOk() {
+      try {
+        const res = await cancelDeploy(appId.value)
+        if (res.data?.code === 0) {
+          message.success('已取消部署')
+          appStatus.value = 'generated'
+        } else {
+          message.error(res.data?.message || '取消失败')
+        }
+      } catch {
+        message.error('取消失败，请稍后重试')
+      }
+    },
+  })
+}
+
+async function handleDownload() {
+  if (!appId.value) return
+  try {
+    const res = await downloadApp(appId.value)
+    const blob = new Blob([res.data as BlobPart], { type: 'application/zip' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${appName.value || 'app'}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+    message.success('下载已开始')
+  } catch {
+    message.error('下载失败，请稍后重试')
+  }
+}
+
 onMounted(() => loadApp())
 onUnmounted(() => currentEventSource?.close())
 </script>
@@ -315,9 +406,30 @@ onUnmounted(() => currentEventSource?.close())
             <EyeOutlined /> 预览
           </button>
         </div>
-        <a-button size="small" class="deploy-btn" disabled>
+
+        <!-- 部署/取消部署 -->
+        <template v-if="appStatus === 'deployed'">
+          <a-button size="small" class="topbar-action topbar-redeploy" :loading="deploying" @click="handleDeploy">
+            <GlobalOutlined /> 重新部署
+          </a-button>
+          <a-button size="small" class="topbar-action topbar-cancel" @click="handleCancelDeploy">
+            <StopOutlined /> 取消部署
+          </a-button>
+          <a-button v-if="deployedUrl" size="small" class="topbar-action topbar-visit">
+            <a :href="deployedUrl" target="_blank" class="visit-link">
+              <LinkOutlined /> 访问部署地址
+            </a>
+          </a-button>
+        </template>
+        <a-button v-else-if="canDeploy" size="small" class="topbar-action topbar-deploy" :loading="deploying" @click="handleDeploy">
           <GlobalOutlined /> 部署
         </a-button>
+
+        <!-- 下载 -->
+        <a-button size="small" class="topbar-action topbar-download" :disabled="!deployKey" @click="handleDownload">
+          <DownloadOutlined /> 下载
+        </a-button>
+
         <a-button type="text" size="small" class="toggle-btn" @click="showPreview = !showPreview">
           <BulbOutlined v-if="showPreview" />
           <EyeInvisibleOutlined v-else />
@@ -409,7 +521,14 @@ onUnmounted(() => currentEventSource?.close())
             </span>
           </div>
           <div class="preview-content">
-            <iframe v-if="deployKey" :key="previewKey" :src="previewUrl" class="preview-iframe" sandbox="allow-scripts allow-same-origin" frameborder="0" />
+            <iframe
+              v-if="deployKey"
+              :key="previewKey"
+              :src="previewUrl"
+              class="preview-iframe"
+              sandbox="allow-scripts allow-same-origin"
+              frameborder="0"
+            />
             <div v-else class="preview-loading">
               <div class="loading-spinner" />
               <p class="loading-text">{{ sending ? 'AI 正在生成应用代码...' : '准备就绪，等待生成...' }}</p>
@@ -571,6 +690,94 @@ onUnmounted(() => currentEventSource?.close())
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
+}
+
+.download-btn {
+  height: 30px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.topbar-action {
+  height: 30px;
+  border-radius: var(--radius-sm) !important;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.topbar-action span {
+  gap: 4px !important;
+}
+
+.topbar-deploy {
+  background: var(--accent) !important;
+  border: none !important;
+  color: white !important;
+}
+
+.topbar-deploy:hover {
+  opacity: 0.9;
+}
+
+.topbar-redeploy {
+  background: var(--accent) !important;
+  border: none !important;
+  color: white !important;
+}
+
+.topbar-redeploy:hover {
+  opacity: 0.9;
+}
+
+.topbar-cancel {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  color: #EF4444 !important;
+}
+
+.topbar-cancel:hover {
+  background: rgba(239, 68, 68, 0.18) !important;
+}
+
+.topbar-download {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--text-secondary) !important;
+}
+
+.topbar-download:hover:not(:disabled) {
+  border-color: var(--border-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.topbar-visit {
+  background: rgba(59, 130, 246, 0.08) !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+  padding: 0 !important;
+}
+
+.topbar-visit:hover {
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+.visit-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #3B82F6 !important;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 7px;
+  width: 100%;
+  height: 100%;
+}
+
+.visit-link:hover {
+  color: #2563EB !important;
 }
 
 .toggle-btn {

@@ -19,11 +19,6 @@ const hasNext = ref(false)
 const nextCursor = ref<string | undefined>(undefined)
 const promptText = ref('')
 
-const features = [
-  { icon: ThunderboltOutlined, title: 'AI 智能生成', desc: '描述你的需求，AI 自动生成完整应用' },
-  { icon: CodeOutlined, title: '多模式支持', desc: '单文件 HTML、多文件项目、Vue 工程' },
-  { icon: RocketOutlined, title: '一键部署', desc: '生成完成即可预览和部署，即刻上线' },
-]
 
 const statusColors: Record<string, string> = {
   draft: 'var(--status-draft)',
@@ -232,19 +227,6 @@ onMounted(() => loadApps())
           >
             {{ example }}
           </a-button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Features -->
-    <section class="features-section">
-      <div class="features-grid">
-        <div v-for="f in features" :key="f.title" class="feature-card">
-          <div class="feature-icon">
-            <component :is="f.icon" />
-          </div>
-          <h3>{{ f.title }}</h3>
-          <p>{{ f.desc }}</p>
         </div>
       </div>
     </section>
@@ -502,65 +484,6 @@ onMounted(() => loadApps())
   background: var(--accent-soft) !important;
 }
 
-/* ============================================
-   Features
-   ============================================ */
-.features-section {
-  position: relative;
-  z-index: 1;
-  padding: var(--space-12) var(--space-6);
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-5);
-}
-
-.feature-card {
-  padding: var(--space-8) var(--space-6);
-  background: var(--bg-surface);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  text-align: center;
-  transition: all var(--duration-normal) var(--ease-out);
-}
-
-.feature-card:hover {
-  border-color: var(--border-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.feature-icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto var(--space-4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-soft);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-md);
-  color: var(--accent);
-  font-size: 22px;
-}
-
-.feature-card h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 var(--space-2);
-}
-
-.feature-card p {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.6;
-}
 
 /* ============================================
    Apps Grid
@@ -737,11 +660,6 @@ onMounted(() => loadApps())
 
   .hero-desc {
     font-size: 15px;
-  }
-
-  .features-grid {
-    grid-template-columns: 1fr;
-    gap: var(--space-3);
   }
 
   .feature-card {

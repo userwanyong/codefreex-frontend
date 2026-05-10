@@ -116,12 +116,23 @@ declare namespace API {
     cover?: string
     initPrompt?: string
     tags?: string[]
+    isPublic?: number
   }
 
   type FeaturedAppResponse = {
     records?: AppVO[]
     nextCursor?: string
     hasNext?: boolean
+  }
+
+  type AppDeployResponse = {
+    appId?: number
+    deployKey?: string
+    status?: string
+    previewUrl?: string
+    deployedUrl?: string
+    coverUrl?: string
+    deployedTime?: string
   }
 
   // === Invite ===

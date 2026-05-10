@@ -189,6 +189,12 @@ function formatTime(ts: number) {
   border-top-right-radius: 4px;
 }
 
+:global(html[data-theme="light"] .chat-msg.msg-user .msg-content) {
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  border-color: rgba(59, 130, 246, 0.15);
+  color: #1e40af;
+}
+
 .msg-ai .msg-content,
 .msg-system .msg-content {
   background: var(--bg-surface);
