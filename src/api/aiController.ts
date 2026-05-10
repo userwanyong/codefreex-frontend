@@ -1,6 +1,14 @@
 import request from '@/request'
 import { createSSEConnection } from '@/utils/sse'
 
+/** 获取应用聊天历史 */
+export async function getChatHistory(appId: string, cursor?: string) {
+  return request<API.BaseResponse<{ records?: API.ChatHistoryItem[]; nextCursor?: string; hasNext?: boolean }>>('/chat/history/list', {
+    method: 'GET',
+    params: { appId, cursor: cursor || undefined },
+  })
+}
+
 /** 预审核提示词 */
 export async function reviewPrompt(prompt: string) {
   return request<API.BaseResponse<{ safe?: boolean; reason?: string; route?: string }>>(

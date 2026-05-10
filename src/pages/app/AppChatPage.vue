@@ -14,7 +14,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { getApp } from '@/api/appController'
-import { optimizePrompt, streamChatGenCode } from '@/api/aiController'
+import { optimizePrompt, streamChatGenCode, getChatHistory } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import ChatMessage from '@/components/ChatMessage.vue'
 
@@ -44,9 +44,13 @@ const inputText = ref('')
 const sending = ref(false)
 const optimizing = ref(false)
 const chatEndRef = ref<HTMLElement | null>(null)
+const messagesAreaRef = ref<HTMLElement | null>(null)
 let currentEventSource: EventSource | null = null
 let msgIdCounter = 0
 let hasAutoSent = false
+let historyCursor = ''
+let historyHasMore = false
+let loadingMoreHistory = false
 
 function genId() {
   msgIdCounter += 1
@@ -70,15 +74,21 @@ async function loadApp() {
     const res = await getApp(appId.value)
     if (res.data?.code === 0 && res.data.data) {
       const app = parseResponseData<API.App>(res.data.data)
-      appName.value = app.appName || generateNameFromPrompt(initialPrompt.value) || '新应用'
+      const promptName = (initialPrompt.value || app.initPrompt || '').slice(0, 6) || '新应用'; appName.value = (!app.appName || app.appName === '未命名应用') ? promptName : app.appName
       appStatus.value = app.status || ''
       deployKey.value = app.deployKey || ''
-      initPrompt.value = initialPrompt.value
+      initPrompt.value = initialPrompt.value || app.initPrompt || ''
 
-      if (initialPrompt.value && !hasAutoSent) {
+      // 加载历史对话
+      await loadChatHistory()
+
+      // 仅在无历史记录且有 prompt 参数时自动发送
+      if (!messages.value.length && initialPrompt.value && !hasAutoSent) {
         hasAutoSent = true
         await nextTick()
         addMessage('user', initialPrompt.value)
+        // 移除 URL 中的 prompt 参数，防止刷新时重复执行
+        router.replace({ path: route.path, query: {} })
         await sendToAI(initialPrompt.value)
       }
     }
@@ -86,14 +96,74 @@ async function loadApp() {
     // ignore
   } finally {
     loadingApp.value = false
+    // loading 结束后消息 DOM 才渲染，此时再滚动到底部
+    await nextTick()
+    scrollToBottom()
   }
 }
 
-function generateNameFromPrompt(prompt: string): string {
-  if (!prompt) return ''
-  const cleaned = prompt.replace(/^(创建|生成|写一个|做一个|帮我做|请|帮我)/, '').trim()
-  return cleaned.slice(0, 8) || prompt.slice(0, 8)
+async function loadChatHistory() {
+  try {
+    const res = await getChatHistory(appId.value)
+    if (res.data?.code === 0 && res.data.data) {
+      const pageData = parseResponseData<{ records?: API.ChatHistoryItem[]; nextCursor?: string; hasNext?: boolean }>(res.data.data)
+      const historyList = pageData.records || []
+      historyCursor = pageData.nextCursor || ''
+      historyHasMore = !!pageData.hasNext
+      if (historyList.length) {
+        messages.value = historyList.map(mapHistoryItem)
+      }
+    }
+  } catch (e) {
+    console.error('[ChatHistory] error:', e)
+  }
 }
+
+function mapHistoryItem(item: API.ChatHistoryItem): ChatMsg {
+  return {
+    id: item.id || genId(),
+    role: item.messageType === 'ai' ? 'ai' as const : 'user' as const,
+    content: item.message || '',
+    status: 'done' as const,
+    timestamp: new Date(item.createTime || Date.now()).getTime(),
+  }
+}
+
+async function loadMoreHistory() {
+  if (loadingMoreHistory || !historyHasMore) return
+  loadingMoreHistory = true
+  try {
+    const el = messagesAreaRef.value
+    const prevHeight = el?.scrollHeight || 0
+    const res = await getChatHistory(appId.value, historyCursor)
+    if (res.data?.code === 0 && res.data.data) {
+      const pageData = parseResponseData<{ records?: API.ChatHistoryItem[]; nextCursor?: string; hasNext?: boolean }>(res.data.data)
+      const historyList = pageData.records || []
+      historyCursor = pageData.nextCursor || ''
+      historyHasMore = !!pageData.hasNext
+      if (historyList.length) {
+        messages.value = [...historyList.map(mapHistoryItem), ...messages.value]
+        await nextTick()
+        // 保持滚动位置：加载后多出的高度补偿回去
+        if (el) el.scrollTop = el.scrollHeight - prevHeight
+      }
+    }
+  } catch (e) {
+    console.error('[ChatHistory] loadMore error:', e)
+  } finally {
+    loadingMoreHistory = false
+  }
+}
+
+function handleMessagesScroll() {
+  const el = messagesAreaRef.value
+  if (!el) return
+  if (el.scrollTop < 50) {
+    loadMoreHistory()
+  }
+}
+
+
 
 function addMessage(role: ChatMsg['role'], content: string, status?: ChatMsg['status']) {
   const msg: ChatMsg = {
@@ -107,7 +177,10 @@ function addMessage(role: ChatMsg['role'], content: string, status?: ChatMsg['st
 }
 
 function scrollToBottom() {
-  nextTick(() => { chatEndRef.value?.scrollIntoView({ behavior: 'smooth' }) })
+  nextTick(() => {
+    const el = messagesAreaRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
 }
 
 async function sendToAI(text: string) {
@@ -234,20 +307,8 @@ onUnmounted(() => currentEventSource?.close())
     <div class="chat-main">
       <!-- Left: Chat Panel -->
       <div class="chat-panel">
-        <!-- Panel header -->
-        <div class="panel-header">
-          <div class="header-left">
-            <span class="header-tag">{{ initPrompt ? initPrompt.slice(0, 18) + (initPrompt.length > 18 ? '...' : '') : '应用对话' }}</span>
-          </div>
-          <div class="header-right">
-            <span class="header-tab active">用户消息</span>
-            <span class="header-divider" />
-            <span class="header-tab">生成后的网页展示</span>
-          </div>
-        </div>
-
         <!-- Messages -->
-        <div class="messages-area">
+        <div ref="messagesAreaRef" class="messages-area" @scroll="handleMessagesScroll">
           <a-spin v-if="loadingApp" class="loading-spin" />
           <template v-else>
             <ChatMessage v-for="msg in messages" :key="msg.id" :message="msg" @retry="handleRetry(msg)" />
@@ -452,55 +513,6 @@ onUnmounted(() => currentEventSource?.close())
   background: var(--bg-base);
   min-height: 0;
   overflow: hidden;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 20px;
-  height: 46px;
-  border-bottom: 1px solid var(--glass-border);
-  flex-shrink: 0;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.header-tag {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  padding: 4px 12px;
-  background: var(--bg-elevated);
-  border-radius: var(--radius-sm);
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.header-tab {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: 4px 12px;
-  cursor: default;
-  transition: color 150ms ease;
-}
-
-.header-tab.active {
-  color: #ef4444;
-}
-
-.header-divider {
-  width: 1px;
-  height: 14px;
-  background: var(--glass-border);
 }
 
 /* Messages Area */

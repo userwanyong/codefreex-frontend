@@ -32,10 +32,9 @@ function formatTime(ts: number) {
 
 <template>
   <div class="chat-msg" :class="[`msg-${message.role}`, { 'msg-error': isError }]">
-    <!-- Avatar -->
-    <div class="msg-avatar">
-      <UserOutlined v-if="isUser" />
-      <RobotOutlined v-else />
+    <!-- AI: avatar on left -->
+    <div v-if="!isUser" class="msg-avatar">
+      <RobotOutlined />
     </div>
 
     <!-- Body -->
@@ -68,6 +67,11 @@ function formatTime(ts: number) {
         </a-button>
       </div>
     </div>
+
+    <!-- User: avatar on right -->
+    <div v-if="isUser" class="msg-avatar">
+      <UserOutlined />
+    </div>
   </div>
 </template>
 
@@ -88,6 +92,19 @@ function formatTime(ts: number) {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* User message: align right */
+.msg-user {
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+/* AI message: align left */
+.msg-ai,
+.msg-system {
+  flex-direction: row;
+  justify-content: flex-start;
 }
 
 /* Avatar */
@@ -116,8 +133,16 @@ function formatTime(ts: number) {
 
 /* Body */
 .msg-body {
-  flex: 1;
   min-width: 0;
+}
+
+.msg-user .msg-body {
+  max-width: 75%;
+}
+
+.msg-ai .msg-body,
+.msg-system .msg-body {
+  max-width: 85%;
 }
 
 /* Label */
@@ -131,6 +156,11 @@ function formatTime(ts: number) {
 
 .msg-user .msg-label {
   justify-content: flex-end;
+}
+
+.msg-ai .msg-label,
+.msg-system .msg-label {
+  justify-content: flex-start;
 }
 
 .label-ai {
@@ -147,7 +177,6 @@ function formatTime(ts: number) {
 .msg-content {
   padding: 14px 18px;
   border-radius: var(--radius-lg);
-  max-width: 100%;
   word-break: break-word;
   line-height: 1.7;
   font-size: 14px;

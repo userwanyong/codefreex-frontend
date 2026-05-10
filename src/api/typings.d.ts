@@ -182,6 +182,19 @@ declare namespace API {
     updateTime?: string
   }
 
+  // === Chat History ===
+  type ChatHistoryItem = {
+    id?: string
+    appId?: string
+    messageType?: string
+    message?: string
+    parentId?: string | null
+    userId?: string
+    createTime?: string
+    updateTime?: string
+    isDelete?: number
+  }
+
   // === Enums ===
   type AppStatus = 'draft' | 'generating' | 'generated' | 'deployed' | 'disabled'
   type CodeGenType = 'html' | 'multi_file' | 'vue_project'

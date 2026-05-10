@@ -124,7 +124,7 @@ async function handleCreateApp() {
     }
 
     // Step 2: 创建应用
-    const res = await createApp({ initPrompt: text })
+    const res = await createApp({ appName: text.slice(0, 6), initPrompt: text })
     if (res.data?.code === 0 && res.data.data) {
       const appData = parseResponseData<API.App>(res.data.data)
       const appId = appData.id || ''
