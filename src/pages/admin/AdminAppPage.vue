@@ -149,6 +149,7 @@ onMounted(() => loadApps())
 .page-header h2 {
   margin: 0;
   font-size: 20px;
+  color: var(--text-primary);
 }
 
 .filter-bar {

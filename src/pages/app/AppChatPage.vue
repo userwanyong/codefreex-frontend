@@ -11,12 +11,15 @@ import {
   GlobalOutlined,
   BulbOutlined,
   EyeInvisibleOutlined,
+  CodeOutlined,
+  EyeOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { getApp } from '@/api/appController'
 import { optimizePrompt, streamChatGenCode, getChatHistory } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import ChatMessage from '@/components/ChatMessage.vue'
+import CodeFilesPanel from '@/components/CodeFilesPanel.vue'
 
 interface ChatMsg {
   id: string
@@ -60,6 +63,16 @@ function genId() {
 // Preview
 const previewUrl = computed(() => (deployKey.value ? `/api/static/${deployKey.value}/` : ''))
 const showPreview = ref(true)
+
+// Right panel view: 'code' | 'preview'
+const rightView = ref<'code' | 'preview'>('code')
+
+// Get the latest streaming/done AI message content for code panel
+const currentAIContent = computed(() => {
+  const aiMsgs = messages.value.filter(m => m.role === 'ai' && m.content)
+  const last = aiMsgs[aiMsgs.length - 1]
+  return last ? last.content : ''
+})
 
 const statusLabel = computed(() => {
   if (sending.value) return '生成中'
@@ -206,6 +219,8 @@ async function sendToAI(text: string) {
       appStatus.value = 'generated'
       refreshAppInfo()
       refreshPreview()
+      // 生成完成后切换到预览视图
+      rightView.value = 'preview'
       scrollToBottom()
     },
     onError(err) {
@@ -292,9 +307,16 @@ onUnmounted(() => currentEventSource?.close())
       </div>
 
       <div class="topbar-right">
-        <span class="preview-label">生成后的网页展示</span>
+        <div class="view-switcher">
+          <button class="switch-btn" :class="{ active: rightView === 'code' }" @click="rightView = 'code'; showPreview = true">
+            <CodeOutlined /> 代码
+          </button>
+          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'; showPreview = true" :disabled="!deployKey">
+            <EyeOutlined /> 预览
+          </button>
+        </div>
         <a-button size="small" class="deploy-btn" disabled>
-          <GlobalOutlined /> 部署按钮
+          <GlobalOutlined /> 部署
         </a-button>
         <a-button type="text" size="small" class="toggle-btn" @click="showPreview = !showPreview">
           <BulbOutlined v-if="showPreview" />
@@ -348,35 +370,68 @@ onUnmounted(() => currentEventSource?.close())
 
       <!-- Right: Preview Panel -->
       <div v-show="showPreview" class="preview-panel">
-        <div class="preview-header">
-          <span class="preview-label">生成后的网页展示</span>
-        </div>
-        <div class="preview-content">
-          <!-- 生成中：加载状态 -->
-          <div v-if="sending || !deployKey" class="preview-loading">
-            <div class="loading-spinner" />
-            <p class="loading-text">{{ sending ? 'AI 正在生成应用代码...' : '准备就绪，等待生成...' }}</p>
-            <div class="loading-steps">
-              <div class="step" :class="{ active: true }">
-                <span class="step-dot" />
-                <span>分析需求</span>
-              </div>
-              <div class="step-line" />
-              <div class="step" :class="{ active: sending }">
-                <span class="step-dot" />
-                <span>生成代码</span>
-              </div>
-              <div class="step-line" />
-              <div class="step" :class="{ active: false }">
-                <span class="step-dot" />
-                <span>预览部署</span>
+        <!-- 代码文件视图 -->
+        <template v-if="rightView === 'code'">
+          <CodeFilesPanel
+            v-if="currentAIContent"
+            :content="currentAIContent"
+            :is-streaming="sending"
+          />
+          <div v-else class="preview-content">
+            <div class="preview-loading">
+              <div class="loading-spinner" />
+              <p class="loading-text">{{ sending ? 'AI 正在生成应用代码...' : '准备就绪，等待生成...' }}</p>
+              <div class="loading-steps">
+                <div class="step" :class="{ active: true }">
+                  <span class="step-dot" />
+                  <span>分析需求</span>
+                </div>
+                <div class="step-line" />
+                <div class="step" :class="{ active: sending }">
+                  <span class="step-dot" />
+                  <span>生成代码</span>
+                </div>
+                <div class="step-line" />
+                <div class="step" :class="{ active: false }">
+                  <span class="step-dot" />
+                  <span>预览部署</span>
+                </div>
               </div>
             </div>
           </div>
+        </template>
 
-          <!-- 生成完成：iframe 预览 -->
-          <iframe v-else :key="previewKey" :src="previewUrl" class="preview-iframe" sandbox="allow-scripts allow-same-origin" frameborder="0" />
-        </div>
+        <!-- 预览视图 -->
+        <template v-else>
+          <div class="preview-header">
+            <span class="preview-title">
+              <EyeOutlined /> 应用预览
+            </span>
+          </div>
+          <div class="preview-content">
+            <iframe v-if="deployKey" :key="previewKey" :src="previewUrl" class="preview-iframe" sandbox="allow-scripts allow-same-origin" frameborder="0" />
+            <div v-else class="preview-loading">
+              <div class="loading-spinner" />
+              <p class="loading-text">{{ sending ? 'AI 正在生成应用代码...' : '准备就绪，等待生成...' }}</p>
+              <div class="loading-steps">
+                <div class="step" :class="{ active: true }">
+                  <span class="step-dot" />
+                  <span>分析需求</span>
+                </div>
+                <div class="step-line" />
+                <div class="step" :class="{ active: sending }">
+                  <span class="step-dot" />
+                  <span>生成代码</span>
+                </div>
+                <div class="step-line" />
+                <div class="step" :class="{ active: false }">
+                  <span class="step-dot" />
+                  <span>预览部署</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -463,11 +518,52 @@ onUnmounted(() => currentEventSource?.close())
   gap: 10px;
 }
 
-.preview-label {
+.view-switcher {
+  display: flex;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  border: 1px solid var(--glass-border);
+}
+
+.switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+
+.switch-btn:hover:not(:disabled) {
+  color: var(--text-secondary);
+}
+
+.switch-btn.active {
+  background: var(--bg-surface);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.preview-title {
   font-size: 14px;
   font-weight: 700;
-  color: #ef4444;
-  letter-spacing: 0.3px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .deploy-btn {
@@ -640,32 +736,28 @@ onUnmounted(() => currentEventSource?.close())
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: var(--bg-base);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
 .preview-header {
-  padding: 0 24px;
-  height: 46px;
+  padding: 0 16px;
+  height: 40px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--glass-border);
   flex-shrink: 0;
+  background: var(--bg-surface);
 }
 
-.preview-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: #ef4444;
-}
 
 .preview-content {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  background: var(--bg-base);
   min-height: 0;
 }
 
@@ -763,6 +855,5 @@ onUnmounted(() => currentEventSource?.close())
     border-bottom: 1px solid var(--glass-border);
   }
   .preview-panel { display: none; }
-  .preview-label { display: none; }
 }
 </style>

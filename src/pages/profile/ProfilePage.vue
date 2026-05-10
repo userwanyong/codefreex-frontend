@@ -81,6 +81,7 @@ onMounted(() => loadData())
 .page-header h2 {
   margin: 0;
   font-size: 20px;
+  color: var(--text-primary);
 }
 
 .profile-card {
@@ -90,6 +91,6 @@ onMounted(() => loadData())
 .credits-value {
   font-size: 18px;
   font-weight: 600;
-  color: #667eea;
+  color: var(--accent);
 }
 </style>

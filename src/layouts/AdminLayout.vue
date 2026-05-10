@@ -32,6 +32,7 @@ function handleMenuClick(event: { key: string }) {
       </div>
       <a-menu
         mode="inline"
+        theme="dark"
         :selected-keys="[activeKey]"
         class="admin-menu"
         @click="handleMenuClick"

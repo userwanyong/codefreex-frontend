@@ -67,10 +67,11 @@ async function handleRedeem() {
 .page-header h2 {
   font-size: 22px;
   margin: 0 0 8px;
+  color: var(--text-primary);
 }
 
 .page-header p {
-  color: #999;
+  color: var(--text-secondary);
   margin: 0;
 }
 </style>

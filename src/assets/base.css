@@ -162,3 +162,31 @@ a:hover {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* ============================================
+   Ant Design Vue 4.x CSS-in-JS Overrides
+   High-specificity selectors to beat dynamic styles
+   ============================================ */
+
+html body .ant-table-wrapper,
+html body .ant-table,
+html body .ant-table-container,
+html body .ant-table-content,
+html body .ant-table-body,
+html body .ant-table-tbody > tr,
+html body .ant-table-tbody > tr > td,
+html body .ant-table-placeholder,
+html body .ant-table-placeholder:hover > td,
+html body .ant-table-placeholder .ant-empty,
+html body .ant-spin-nested-loading,
+html body .ant-spin-nested-loading .ant-spin,
+html body .ant-spin-container,
+html body .ant-empty {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+html body .ant-table-thead > tr > th {
+  background: var(--bg-surface) !important;
+  background-color: var(--bg-surface) !important;
+}

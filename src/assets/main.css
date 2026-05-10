@@ -30,6 +30,24 @@
   background: var(--accent-soft) !important;
 }
 
+.ant-menu-dark .ant-menu-item {
+  color: var(--text-secondary) !important;
+}
+
+.ant-menu-dark .ant-menu-item:hover {
+  color: var(--text-primary) !important;
+  background: var(--bg-elevated) !important;
+}
+
+.ant-menu-dark .ant-menu-item-selected,
+.ant-menu-dark .ant-menu-item-selected .anticon {
+  color: var(--accent) !important;
+}
+
+.ant-menu-dark .ant-menu-item .anticon {
+  color: var(--text-muted) !important;
+}
+
 /* Card */
 .ant-card {
   background: var(--bg-surface) !important;
@@ -121,15 +139,97 @@
   color: var(--text-primary) !important;
 }
 
+.ant-select-focused .ant-select-selector {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-glow) !important;
+}
+
+.ant-select-arrow {
+  color: var(--text-muted) !important;
+}
+
+.ant-select-dropdown {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.ant-select-item {
+  color: var(--text-primary) !important;
+}
+
+.ant-select-item-option-active {
+  background: var(--bg-elevated) !important;
+}
+
+.ant-select-item-option-selected {
+  background: var(--accent-soft) !important;
+}
+
+/* InputNumber */
+.ant-input-number {
+  background: var(--bg-surface) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-input-number:hover {
+  border-color: var(--accent) !important;
+}
+
+.ant-input-number-focused {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-glow) !important;
+}
+
+.ant-input-number-input {
+  color: var(--text-primary) !important;
+}
+
+.ant-input-number-handler-wrap {
+  background: var(--bg-elevated) !important;
+  border-left: 1px solid var(--glass-border) !important;
+}
+
+.ant-input-number-handler {
+  border-bottom: 1px solid var(--glass-border) !important;
+  color: var(--text-muted) !important;
+}
+
+.ant-input-number-handler:hover {
+  color: var(--accent) !important;
+}
+
 /* Tag */
 .ant-tag {
   border-radius: var(--radius-sm) !important;
 }
 
 /* Table */
+.ant-table-wrapper {
+  background: transparent !important;
+}
+
 .ant-table {
   background: transparent !important;
   color: var(--text-primary) !important;
+}
+
+.ant-table-container {
+  background: transparent !important;
+}
+
+.ant-table-content {
+  background: transparent !important;
+}
+
+.ant-table-body {
+  background: transparent !important;
+}
+
+.ant-table-cell-row-hover {
+  background: transparent !important;
 }
 
 .ant-table-thead > tr > th {
@@ -139,19 +239,84 @@
 }
 
 .ant-table-tbody > tr > td {
+  background: transparent !important;
   border-bottom: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-table-tbody > tr {
+  background: transparent !important;
 }
 
 .ant-table-tbody > tr:hover > td {
-  background: var(--bg-surface) !important;
+  background: var(--bg-elevated) !important;
+}
+
+.ant-table-tbody > tr:nth-child(even) > td {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.ant-table-tbody > tr:nth-child(even):hover > td {
+  background: var(--bg-elevated) !important;
 }
 
 .ant-table-wrapper .ant-table-container {
   border-radius: var(--radius-lg) !important;
   overflow: hidden;
+  border: 1px solid var(--glass-border) !important;
+}
+
+.ant-table-cell {
+  color: var(--text-primary) !important;
+}
+
+.ant-table-placeholder {
+  background: transparent !important;
+}
+
+.ant-table-placeholder:hover > td {
+  background: transparent !important;
+}
+
+.ant-table-placeholder .ant-empty {
+  background: transparent !important;
+}
+
+.ant-table-expanded-row > td {
+  background: var(--bg-surface) !important;
+}
+
+/* Spin / Loading */
+.ant-spin {
+  color: var(--text-primary) !important;
+}
+
+.ant-spin-container {
+  background: transparent !important;
+}
+
+.ant-spin-blur {
+  opacity: 0.5 !important;
+}
+
+/* Empty state */
+.ant-empty {
+  background: transparent !important;
+}
+
+.ant-empty-description {
+  color: var(--text-muted) !important;
+}
+
+.ant-empty-image svg {
+  fill: var(--text-disabled) !important;
 }
 
 /* Pagination */
+.ant-pagination {
+  color: var(--text-secondary) !important;
+}
+
 .ant-pagination-item {
   background: var(--bg-surface) !important;
   border-color: var(--glass-border) !important;
@@ -161,12 +326,70 @@
   color: var(--text-secondary) !important;
 }
 
+.ant-pagination-item:hover {
+  border-color: var(--accent) !important;
+}
+
+.ant-pagination-item:hover a {
+  color: var(--accent) !important;
+}
+
 .ant-pagination-item-active {
   border-color: var(--accent) !important;
+  background: var(--accent-soft) !important;
 }
 
 .ant-pagination-item-active a {
   color: var(--accent) !important;
+}
+
+.ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination-next .ant-pagination-item-link {
+  background: var(--bg-surface) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-secondary) !important;
+}
+
+.ant-pagination-prev:hover .ant-pagination-item-link,
+.ant-pagination-next:hover .ant-pagination-item-link {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.ant-pagination-prev[disabled] .ant-pagination-item-link,
+.ant-pagination-next[disabled] .ant-pagination-item-link {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text-disabled) !important;
+}
+
+.ant-pagination-jumper {
+  color: var(--text-secondary) !important;
+}
+
+.ant-pagination-jumper input {
+  background: var(--bg-surface) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-pagination-jumper input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-glow) !important;
+}
+
+.ant-pagination-options-quick-jumper {
+  color: var(--text-secondary) !important;
+}
+
+.ant-pagination-total-text {
+  color: var(--text-secondary) !important;
+}
+
+.ant-pagination .ant-select-selector {
+  background: var(--bg-surface) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-primary) !important;
 }
 
 /* Modal */
