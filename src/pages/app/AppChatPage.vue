@@ -71,11 +71,17 @@ const showPreview = ref(true)
 // Right panel view: 'code' | 'preview'
 const rightView = ref<'code' | 'preview'>('code')
 
-// Get the latest streaming/done AI message content for code panel
+// Get the latest AI message that contains code files for the code panel
 const currentAIContent = computed(() => {
   const aiMsgs = messages.value.filter(m => m.role === 'ai' && m.content)
-  const last = aiMsgs[aiMsgs.length - 1]
-  return last ? last.content : ''
+  // 从后往前找到最后一条包含代码块的消息，避免纯文本回复覆盖代码内容
+  for (let i = aiMsgs.length - 1; i >= 0; i--) {
+    const msg = aiMsgs[i]!
+    if (msg.content.includes('```')) {
+      return msg.content
+    }
+  }
+  return ''
 })
 
 const statusLabel = computed(() => {
@@ -258,7 +264,7 @@ async function sendToAI(text: string) {
 
 async function handleSend() {
   const text = inputText.value.trim()
-  if (!text || sending) return
+  if (!text || sending.value) return
   inputText.value = ''
   addMessage('user', text, 'done')
   await sendToAI(text)
@@ -320,22 +326,30 @@ const canDeploy = computed(() => {
 
 async function handleDeploy() {
   if (deploying.value || !appId.value) return
-  deploying.value = true
-  try {
-    const res = await deployApp(appId.value)
-    if (res.data?.code === 0 && res.data.data) {
-      const data = parseResponseData<API.AppDeployResponse>(res.data.data)
-      if (data.deployKey) deployKey.value = data.deployKey
-      appStatus.value = 'deployed'
-      message.success('部署成功')
-    } else {
-      message.error((res.data as { message?: string })?.message || '部署失败')
-    }
-  } catch {
-    message.error('部署失败，请稍后重试')
-  } finally {
-    deploying.value = false
-  }
+  Modal.confirm({
+    title: '确认部署',
+    content: '部署后，该应用将自动设为公开状态，任何人都可以访问。确认部署吗？',
+    okText: '确认部署',
+    cancelText: '取消',
+    async onOk() {
+      deploying.value = true
+      try {
+        const res = await deployApp(appId.value)
+        if (res.data?.code === 0 && res.data.data) {
+          const data = parseResponseData<API.AppDeployResponse>(res.data.data)
+          if (data.deployKey) deployKey.value = data.deployKey
+          appStatus.value = 'deployed'
+          message.success('部署成功')
+        } else {
+          message.error((res.data as { message?: string })?.message || '部署失败')
+        }
+      } catch {
+        message.error('部署失败，请稍后重试')
+      } finally {
+        deploying.value = false
+      }
+    },
+  })
 }
 
 function handleCancelDeploy() {

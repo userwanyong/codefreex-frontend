@@ -110,6 +110,22 @@ function openEditModal() {
   editModalVisible.value = true
 }
 
+function handlePublicChange(val: boolean) {
+  if (!val && app.value?.status === 'deployed') {
+    Modal.confirm({
+      title: '设为私有',
+      content: '设为私有后，应用的部署将自动关闭，其他人将无法访问。确认设为私有吗？',
+      okText: '确认',
+      cancelText: '取消',
+      onOk() {
+        editForm.value.isPublic = 0
+      },
+    })
+  } else {
+    editForm.value.isPublic = val ? 1 : 0
+  }
+}
+
 async function handleEdit() {
   if (!app.value?.id) return
   try {
@@ -157,24 +173,32 @@ function handleDelete() {
 
 async function handleDeploy() {
   if (deploying.value || !app.value?.id) return
-  deploying.value = true
-  try {
-    const res = await deployApp(app.value.id)
-    if (res.data?.code === 0 && res.data.data) {
-      const deployData = parseResponseData<API.AppDeployResponse>(res.data.data)
-      if (deployData.deployKey) {
-        app.value = { ...app.value!, deployKey: deployData.deployKey }
+  Modal.confirm({
+    title: '确认部署',
+    content: '部署后，该应用将自动设为公开状态，任何人都可以访问。确认部署吗？',
+    okText: '确认部署',
+    cancelText: '取消',
+    async onOk() {
+      deploying.value = true
+      try {
+        const res = await deployApp(app.value!.id!)
+        if (res.data?.code === 0 && res.data.data) {
+          const deployData = parseResponseData<API.AppDeployResponse>(res.data.data)
+          if (deployData.deployKey) {
+            app.value = { ...app.value!, deployKey: deployData.deployKey }
+          }
+          message.success('部署成功')
+          loadApp()
+        } else {
+          message.error((res.data as { message?: string })?.message || '部署失败')
+        }
+      } catch {
+        message.error('部署失败，请稍后重试')
+      } finally {
+        deploying.value = false
       }
-      message.success('部署成功')
-      loadApp()
-    } else {
-      message.error((res.data as { message?: string })?.message || '部署失败')
-    }
-  } catch {
-    message.error('部署失败，请稍后重试')
-  } finally {
-    deploying.value = false
-  }
+    },
+  })
 }
 
 async function handleDownload() {
@@ -414,7 +438,7 @@ onMounted(() => loadApp())
         <a-form-item label="是否公开">
           <a-switch
             :checked="editForm.isPublic === 1"
-            @change="(val: boolean) => editForm.isPublic = val ? 1 : 0"
+            @change="handlePublicChange"
           />
           <span style="margin-left: 8px; color: var(--text-muted); font-size: 13px">
             {{ editForm.isPublic === 1 ? '公开可见' : '仅自己可见' }}
