@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RobotOutlined, UserOutlined, LoadingOutlined, WarningOutlined, RedoOutlined } from '@ant-design/icons-vue'
+import { RobotOutlined, UserOutlined, LoadingOutlined, WarningOutlined, RedoOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
+
+interface StatusItem {
+  icon: string
+  label: string
+  detail?: string
+  status: 'done' | 'running' | 'error'
+  downloadAction?: string
+  nodeKey?: string
+}
 
 export interface ChatMsg {
   id: string
@@ -9,6 +18,7 @@ export interface ChatMsg {
   content: string
   status?: 'sending' | 'streaming' | 'done' | 'error'
   timestamp: number
+  statusItems?: StatusItem[]
 }
 
 const props = defineProps<{
@@ -17,11 +27,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   retry: []
+  download: [action: string]
 }>()
 
 const isUser = computed(() => props.message.role === 'user')
 const isStreaming = computed(() => props.message.status === 'streaming')
 const isError = computed(() => props.message.status === 'error')
+const hasStatusItems = computed(() => !!(props.message.statusItems && props.message.statusItems.length))
 
 function formatTime(ts: number) {
   const d = new Date(ts)
@@ -46,8 +58,22 @@ function formatTime(ts: number) {
         <span class="msg-time">{{ formatTime(message.timestamp) }}</span>
       </div>
 
-      <!-- Content -->
-      <div class="msg-content" :class="{ 'content-streaming': isStreaming, 'content-error': isError }">
+      <!-- Workflow status items -->
+      <div v-if="hasStatusItems" class="status-list" :class="{ 'content-streaming': isStreaming, 'content-error': isError }">
+        <div v-for="(item, idx) in message.statusItems" :key="idx" class="status-item" :class="'st-' + item.status">
+          <span class="status-icon">{{ item.icon }}</span>
+          <span class="status-label">{{ item.label }}</span>
+          <span v-if="item.detail" class="status-detail">{{ item.detail }}</span>
+          <a v-if="item.downloadAction" class="status-download" @click.prevent="emit('download', item.downloadAction)">
+            <DownloadOutlined style="margin-right: 3px;" />下载
+          </a>
+          <LoadingOutlined v-if="item.status === 'running'" class="status-spinner" />
+          <span v-if="item.status === 'done'" class="status-check">✓</span>
+        </div>
+      </div>
+
+      <!-- Normal content -->
+      <div v-else class="msg-content" :class="{ 'content-streaming': isStreaming, 'content-error': isError }">
         <template v-if="isUser">
           {{ message.content }}
         </template>
@@ -232,6 +258,87 @@ function formatTime(ts: number) {
 .content-error {
   border-color: rgba(239, 68, 68, 0.3);
   background: rgba(239, 68, 68, 0.05);
+}
+
+/* Status List */
+.status-list {
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-top-left-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 4px 0;
+}
+
+.status-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.status-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status-detail {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  margin-left: 2px;
+  opacity: 0.8;
+}
+
+.status-download {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.08);
+  transition: background 150ms ease;
+}
+
+.status-download:hover {
+  background: rgba(34, 197, 94, 0.16);
+}
+
+.status-spinner {
+  color: var(--accent);
+  font-size: 13px;
+  margin-left: auto;
+}
+
+.status-check {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.st-error .status-label {
+  color: #ef4444;
+}
+
+.st-error .status-icon {
+  color: #ef4444;
 }
 
 /* Actions */

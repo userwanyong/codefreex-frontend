@@ -19,10 +19,20 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { getApp, deployApp, cancelDeploy, downloadApp } from '@/api/appController'
-import { optimizePrompt, streamChatGenCode, getChatHistory } from '@/api/aiController'
+import { optimizePrompt, streamWorkflowGenerate, getChatHistory } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CodeFilesPanel from '@/components/CodeFilesPanel.vue'
+import WorkflowProgress from '@/components/WorkflowProgress.vue'
+
+interface StatusItem {
+  icon: string
+  label: string
+  detail?: string
+  status: 'done' | 'running' | 'error'
+  downloadAction?: string
+  nodeKey?: string
+}
 
 interface ChatMsg {
   id: string
@@ -30,6 +40,7 @@ interface ChatMsg {
   content: string
   status?: 'sending' | 'streaming' | 'done' | 'error'
   timestamp: number
+  statusItems?: StatusItem[]
 }
 
 const route = useRoute()
@@ -52,11 +63,58 @@ const optimizing = ref(false)
 const chatEndRef = ref<HTMLElement | null>(null)
 const messagesAreaRef = ref<HTMLElement | null>(null)
 let currentEventSource: EventSource | null = null
+let currentAbortController: AbortController | null = null
 let msgIdCounter = 0
 let hasAutoSent = false
 let historyCursor = ''
 let historyHasMore = false
 let loadingMoreHistory = false
+
+// Workflow state
+const currentNode = ref<API.WorkflowNode | null>(null)
+const retryCount = ref(0)
+const codeContent = ref('')
+const prdContent = ref('')
+const historyPrdContent = ref('')
+const historyCodeContent = ref('')
+
+const NODE_DESCRIPTIONS: Record<string, string> = {
+  promptGuardNode: '关键词安全检查中...',
+  promptReviewNode: 'AI 安全审查中...',
+  intentClassifyNode: '意图识别中...',
+  prdGenNode: '生成产品需求文档...',
+  imagePlanNode: '规划图片资源...',
+  imageFetchNode: '获取图片素材...',
+  promptEnhanceNode: '增强提示词...',
+  routeNode: '确定生成方案...',
+  codeGenNode: 'AI 生成代码中...',
+  qualityCheckNode: '质量验证中...',
+  persistNode: '保存文件中...',
+  chatDirectNode: 'AI 思考回复中...',
+}
+
+const NODE_LABELS: Record<string, { icon: string; label: string }> = {
+  promptReviewNode: { icon: '🛡️', label: '检查内容安全性' },
+  intentClassifyNode: { icon: '🔍', label: '分析用户意图' },
+  prdGenNode: { icon: '📋', label: '生成需求文档' },
+  imagePlanNode: { icon: '🖼️', label: '规划图片资源' },
+  imageFetchNode: { icon: '🖼️', label: '获取图片素材' },
+  promptEnhanceNode: { icon: '✨', label: '优化提示词' },
+  routeNode: { icon: '🎯', label: '确定生成方案' },
+  codeGenNode: { icon: '💻', label: '编写代码' },
+  persistNode: { icon: '✅', label: '生成完成' },
+}
+
+// 节点完成后预显示下一个节点，消除后端处理空档
+const NEXT_NODE: Record<string, string> = {
+  promptReviewNode: 'intentClassifyNode',
+  intentClassifyNode: 'prdGenNode',
+  prdGenNode: 'imagePlanNode',
+  imagePlanNode: 'imageFetchNode',
+  imageFetchNode: 'promptEnhanceNode',
+  promptEnhanceNode: 'routeNode',
+}
+
 
 function genId() {
   msgIdCounter += 1
@@ -71,20 +129,26 @@ const showPreview = ref(true)
 // Right panel view: 'code' | 'preview'
 const rightView = ref<'code' | 'preview'>('code')
 
-// Get the latest AI message that contains code files for the code panel
+// Get the latest code content for the right panel
 const currentAIContent = computed(() => {
+  if (codeContent.value) return codeContent.value
+  if (historyCodeContent.value) return historyCodeContent.value
+  // Fallback: load from chat history (strip STATUS markers)
   const aiMsgs = messages.value.filter(m => m.role === 'ai' && m.content)
-  // 从后往前找到最后一条包含代码块的消息，避免纯文本回复覆盖代码内容
   for (let i = aiMsgs.length - 1; i >= 0; i--) {
-    const msg = aiMsgs[i]!
-    if (msg.content.includes('```')) {
-      return msg.content
+    const raw = aiMsgs[i]!.content
+    const stripped = raw.replace(/^<!--STATUS:.*?-->\n?/s, '')
+    if (stripped.includes('```')) {
+      return stripped
     }
   }
   return ''
 })
 
 const statusLabel = computed(() => {
+  if (sending.value && currentNode.value) {
+    return NODE_DESCRIPTIONS[currentNode.value] || '处理中'
+  }
   if (sending.value) return '生成中'
   const map: Record<string, string> = { generated: '已生成', draft: '草稿', deployed: '已部署', disabled: '已禁用' }
   return map[appStatus.value] || ''
@@ -104,6 +168,9 @@ async function loadApp() {
 
       // 加载历史对话
       await loadChatHistory()
+
+      // 有代码内容时默认展示预览，否则展示代码
+      if (historyCodeContent.value) rightView.value = 'preview'
 
       // 仅在无历史记录且有 prompt 参数时自动发送
       if (!messages.value.length && initialPrompt.value && !hasAutoSent) {
@@ -134,7 +201,7 @@ async function loadChatHistory() {
       historyCursor = pageData.nextCursor || ''
       historyHasMore = !!pageData.hasNext
       if (historyList.length) {
-        messages.value = historyList.map(mapHistoryItem)
+        messages.value = groupStatusMessages(historyList.map(mapRawHistoryItem))
       }
     }
   } catch (e) {
@@ -142,7 +209,7 @@ async function loadChatHistory() {
   }
 }
 
-function mapHistoryItem(item: API.ChatHistoryItem): ChatMsg {
+function mapRawHistoryItem(item: API.ChatHistoryItem): ChatMsg {
   return {
     id: item.id || genId(),
     role: item.messageType === 'ai' ? 'ai' as const : 'user' as const,
@@ -150,6 +217,60 @@ function mapHistoryItem(item: API.ChatHistoryItem): ChatMsg {
     status: 'done' as const,
     timestamp: new Date(item.createTime || Date.now()).getTime(),
   }
+}
+
+function parseStatusMarker(content: string): { item: StatusItem; memoryContent: string } | null {
+  const match = content.match(/^<!--STATUS:(.*?)-->\n?/)
+  if (!match) return null
+  try {
+    const data = JSON.parse(match[1])
+    return {
+      item: {
+        icon: data.icon || '',
+        label: data.label || '',
+        detail: data.detail,
+        status: data.status || 'done',
+        downloadAction: data.downloadAction,
+      },
+      memoryContent: content.slice(match[0].length),
+    }
+  } catch {
+    return null
+  }
+}
+
+function groupStatusMessages(items: ChatMsg[]): ChatMsg[] {
+  const result: ChatMsg[] = []
+  let statusGroup: StatusItem[] = []
+  let groupMsg: ChatMsg | null = null
+
+  for (const item of items) {
+    if (item.role === 'ai' && !item.statusItems) {
+      const parsed = parseStatusMarker(item.content)
+      if (parsed) {
+        statusGroup.push(parsed.item)
+        if (parsed.item.downloadAction === 'prd' && parsed.memoryContent) {
+          historyPrdContent.value = parsed.memoryContent
+        }
+        if (parsed.memoryContent.includes('```')) {
+          historyCodeContent.value = parsed.memoryContent
+        }
+        if (!groupMsg) groupMsg = item
+        continue
+      }
+    }
+    // Flush status group
+    if (statusGroup.length && groupMsg) {
+      result.push({ ...groupMsg, content: '', statusItems: [...statusGroup] })
+      statusGroup = []
+      groupMsg = null
+    }
+    result.push(item)
+  }
+  if (statusGroup.length && groupMsg) {
+    result.push({ ...groupMsg, content: '', statusItems: [...statusGroup] })
+  }
+  return result
 }
 
 async function loadMoreHistory() {
@@ -165,9 +286,14 @@ async function loadMoreHistory() {
       historyCursor = pageData.nextCursor || ''
       historyHasMore = !!pageData.hasNext
       if (historyList.length) {
-        messages.value = [...historyList.map(mapHistoryItem), ...messages.value]
+        const newItems = historyList.map(mapRawHistoryItem)
+        // 加载更早的历史时，保留最新代码/PRD 内容不被旧消息覆盖
+        const savedCode = historyCodeContent.value
+        const savedPrd = historyPrdContent.value
+        messages.value = groupStatusMessages([...newItems, ...messages.value])
+        if (savedCode) historyCodeContent.value = savedCode
+        if (savedPrd) historyPrdContent.value = savedPrd
         await nextTick()
-        // 保持滚动位置：加载后多出的高度补偿回去
         if (el) el.scrollTop = el.scrollHeight - prevHeight
       }
     }
@@ -188,6 +314,18 @@ function handleMessagesScroll() {
 
 
 
+function downloadPrd() {
+  const content = prdContent.value || historyPrdContent.value
+  if (!content) return
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${appName.value || 'app'}-PRD.md`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function addMessage(role: ChatMsg['role'], content: string, status?: ChatMsg['status']) {
   const msg: ChatMsg = {
     id: genId(), role, content,
@@ -207,57 +345,220 @@ function scrollToBottom() {
 }
 
 async function sendToAI(text: string) {
-  if (currentEventSource) { currentEventSource.close(); currentEventSource = null }
+  if (currentAbortController) { currentAbortController.abort(); currentAbortController = null }
 
   sending.value = true
-  const aiMsg = addMessage('ai', '', 'streaming')
-  const aiMsgId = aiMsg.id
+  currentNode.value = null
+  retryCount.value = 0
+  codeContent.value = ''
+  prdContent.value = ''
 
-  // 用 RAF 批量刷新 SSE 数据，减少 Vue 渲染次数，避免长内容卡顿
+  // 创建一条 AI 消息（编码模式显示 statusItems，对话模式显示文本）
+  const statusMsg = addMessage('ai', '', 'streaming')
+  const statusMsgId = statusMsg.id
+  const statusItems: StatusItem[] = []
+  let codeStatusAdded = false
+  let isChatMode = false
+
+  // 对话模式：第二个气泡（文本回复）
+  let chatMsgCreated = false
+  let chatMsgId = ''
+
+  // 文本流式缓冲
   let buffer = ''
   let rafId = 0
+
   function flushBuffer() {
-    const target = messages.value.find((m) => m.id === aiMsgId)
+    const target = messages.value.find((m) => m.id === statusMsgId)
     if (target && buffer) { target.content += buffer; buffer = '' }
     scrollToBottom()
     rafId = 0
   }
 
-  currentEventSource = streamChatGenCode(appId.value, text, {
+  function flushBufferChat() {
+    const target = messages.value.find((m) => m.id === chatMsgId)
+    if (target && buffer) { target.content += buffer; buffer = '' }
+    scrollToBottom()
+    rafId = 0
+  }
+
+  function syncStatus() {
+    const target = messages.value.find((m) => m.id === statusMsgId)
+    if (target) {
+      target.statusItems = [...statusItems]
+    }
+    scrollToBottom()
+  }
+
+  currentAbortController = streamWorkflowGenerate(appId.value, text, {
     onMessage(event) {
-      if (event.type === 'deployKey' && typeof event.data === 'string') {
-        deployKey.value = event.data
-        return
+      // tool_request：节点开始执行 → 显示 "running" 状态
+      if (event.type === 'tool_request') {
+        const data = event.data as { node?: string } | undefined
+        if (data?.node) {
+          if (data.node === 'codeGenNode' && currentNode.value === 'qualityCheckNode') {
+            retryCount.value += 1
+          }
+          currentNode.value = data.node as API.WorkflowNode
+
+          // chatDirectNode 不显示 running 状态
+          if (data.node !== 'chatDirectNode') {
+            const cfg = NODE_LABELS[data.node]
+            if (cfg) {
+              const old = statusItems.findIndex(it => it.nodeKey === data.node)
+              if (old >= 0) statusItems.splice(old, 1)
+              statusItems.push({ icon: cfg.icon, label: cfg.label, status: 'running', nodeKey: data.node })
+              syncStatus()
+            }
+          }
+        }
       }
-      if (event.type === 'ai_r' && typeof event.data === 'string') {
-        buffer += event.data
-        if (!rafId) {
-          rafId = requestAnimationFrame(flushBuffer)
+
+      // tool_executed：节点执行完毕 → 更新为 "done" 状态
+      if (event.type === 'tool_executed') {
+        const eventData = event.data as { node?: string; message?: string } | undefined
+        const node = eventData?.node
+        const msg = eventData?.message
+
+        if (node) {
+          // 移除该节点的 "running" 项
+          const runIdx = statusItems.findIndex(it => it.nodeKey === node)
+          if (runIdx >= 0) statusItems.splice(runIdx, 1)
+
+          if (node === 'intentClassifyNode' && msg) {
+            const isCoding = msg.includes('编码')
+            statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : '普通对话' })
+            if (!isCoding) {
+              isChatMode = true
+            }
+          } else if (node === 'chatDirectNode') {
+            // 对话模式不添加状态项
+          } else if (node === 'prdGenNode' && msg) {
+            prdContent.value = msg
+            statusItems.push({ icon: '📋', label: '生成需求文档', status: 'done', detail: 'PRD.md', downloadAction: 'prd' })
+          } else if (node === 'routeNode' && msg) {
+            statusItems.push({ icon: '🎯', label: '确定生成方案', status: 'done', detail: msg.replace('Route: ', '') })
+          } else if (node === 'promptReviewNode' && msg) {
+            const passed = msg.toLowerCase().includes('passed')
+            statusItems.push({ icon: '🛡️', label: '检查内容安全性', status: passed ? 'done' : 'error', detail: passed ? '通过' : '未通过' })
+          } else if (node === 'imagePlanNode') {
+            statusItems.push({ icon: '🖼️', label: '规划图片资源', status: 'done', detail: '已完成' })
+          } else if (node === 'imageFetchNode') {
+            statusItems.push({ icon: '🖼️', label: '获取图片素材', status: 'done', detail: '已完成' })
+          } else if (node === 'promptEnhanceNode') {
+            statusItems.push({ icon: '✨', label: '优化提示词', status: 'done', detail: '已完成' })
+          } else if (node === 'persistNode') {
+            statusItems.push({ icon: '✅', label: '生成完成', status: 'done', detail: '已完成' })
+          }
+
+          // 预显示下一个节点，消除后端处理空档
+          const nextNodeKey = NEXT_NODE[node]
+          if (nextNodeKey && !isChatMode) {
+            const nextCfg = NODE_LABELS[nextNodeKey]
+            if (nextCfg) {
+              statusItems.push({ icon: nextCfg.icon, label: nextCfg.label, status: 'running', nodeKey: nextNodeKey })
+            }
+          }
+          syncStatus()
+        }
+      }
+
+      // ai_response：流式输出
+      if (event.type === 'ai_response' && typeof event.data === 'string') {
+        if (isChatMode) {
+          // 对话模式：状态项保留在第一个气泡，文本写入新气泡
+          if (!chatMsgCreated) {
+            chatMsgCreated = true
+            // 先把状态消息标记为完成
+            const statusTarget = messages.value.find((m) => m.id === statusMsgId)
+            if (statusTarget) statusTarget.status = 'done'
+            // 创建新的文本消息
+            const chatMsg = addMessage('ai', '', 'streaming')
+            chatMsgId = chatMsg.id
+          }
+          buffer += event.data
+          if (!rafId) rafId = requestAnimationFrame(flushBufferChat)
+        } else {
+          // 编码模式：写入右侧代码面板
+          codeContent.value += event.data
+          if (!codeStatusAdded) {
+            codeStatusAdded = true
+            // 清理可能残留的 codeGenNode 预显示项
+            const cgIdx = statusItems.findIndex(it => it.nodeKey === 'codeGenNode')
+            if (cgIdx >= 0) statusItems.splice(cgIdx, 1)
+            statusItems.push({ icon: '💻', label: '编写代码', status: 'running', nodeKey: 'codeWriting' })
+            syncStatus()
+          }
+          scrollToBottom()
         }
       }
     },
     onDone() {
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
-      const target = messages.value.find((m) => m.id === aiMsgId)
-      if (target && buffer) { target.content += buffer; buffer = '' }
-      if (target) target.status = 'done'
+
+      if (isChatMode) {
+        // 对话模式：将状态消息标记完成，文本消息也标记完成
+        const statusTarget = messages.value.find((m) => m.id === statusMsgId)
+        if (statusTarget) {
+          statusTarget.status = 'done'
+        }
+        // flush 文本到第二个气泡
+        if (chatMsgCreated) {
+          const chatTarget = messages.value.find((m) => m.id === chatMsgId)
+          if (chatTarget && buffer) { chatTarget.content += buffer; buffer = '' }
+          if (chatTarget) chatTarget.status = 'done'
+        }
+      } else {
+        const target = messages.value.find((m) => m.id === statusMsgId)
+        if (target && buffer) { target.content += buffer; buffer = '' }
+        // 编码模式：完成状态项
+        const codeIdx = statusItems.findIndex(it => it.nodeKey === 'codeWriting')
+        if (codeIdx >= 0) {
+          statusItems[codeIdx] = { icon: '💻', label: '编写代码', status: 'done', detail: '已完成' }
+        }
+        if (target) {
+          target.statusItems = [...statusItems]
+          target.status = 'done'
+        }
+        refreshPreview()
+        if (codeContent.value) rightView.value = 'preview'
+      }
+
       sending.value = false
-      currentEventSource = null
+      currentNode.value = null
+      currentAbortController = null
       appStatus.value = 'generated'
       refreshAppInfo()
-      refreshPreview()
-      rightView.value = 'preview'
       scrollToBottom()
     },
     onError(err) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
-      const target = messages.value.find((m) => m.id === aiMsgId)
-      if (target) {
-        if (buffer) { target.content += buffer; buffer = '' }
-        target.status = 'error'; if (!target.content) target.content = '生成中断，请重试'
+
+      if (isChatMode) {
+        // 对话模式：状态消息保持不变，文本消息标记错误
+        const statusTarget = messages.value.find((m) => m.id === statusMsgId)
+        if (statusTarget) statusTarget.status = 'done'
+        if (chatMsgCreated) {
+          const chatTarget = messages.value.find((m) => m.id === chatMsgId)
+          if (chatTarget && buffer) { chatTarget.content += buffer; buffer = '' }
+          if (chatTarget) {
+            chatTarget.status = 'error'
+            if (!chatTarget.content) chatTarget.content = '对话中断，请重试'
+          }
+        }
+      } else {
+        const target = messages.value.find((m) => m.id === statusMsgId)
+        if (target && buffer) { target.content += buffer; buffer = '' }
+        statusItems.forEach(it => { if (it.status === 'running') it.status = 'error' })
+        statusItems.push({ icon: '❌', label: '生成失败', status: 'error' })
+        if (target) {
+          target.statusItems = [...statusItems]
+          target.status = 'error'
+        }
       }
       sending.value = false
-      currentEventSource = null
+      currentNode.value = null
+      currentAbortController = null
     },
   })
 }
@@ -272,14 +573,17 @@ async function handleSend() {
 
 async function handleRetry(msg: ChatMsg) {
   const idx = messages.value.indexOf(msg)
-  if (idx > 0) {
-    const userMsg = messages.value[idx - 1]
-    if (userMsg && userMsg.role === 'user') {
-      const target = messages.value.find((m) => m.id === msg.id)
-      if (target) { target.status = 'streaming'; target.content = '' }
-      await sendToAI(userMsg.content)
-    }
+  if (idx < 1) return
+  // 向前找到触发该生成的用户消息
+  let userIdx = idx - 1
+  while (userIdx >= 0 && messages.value[userIdx]!.role !== 'user') {
+    userIdx--
   }
+  if (userIdx < 0) return
+  const userMsg = messages.value[userIdx]!
+  // 删除该用户消息之后的所有消息（包括当前这条和后续 AI 消息）
+  messages.value = messages.value.slice(0, userIdx + 1)
+  await sendToAI(userMsg.content)
 }
 
 async function handleOptimize() {
@@ -393,7 +697,10 @@ async function handleDownload() {
 }
 
 onMounted(() => loadApp())
-onUnmounted(() => currentEventSource?.close())
+onUnmounted(() => {
+  currentEventSource?.close()
+  currentAbortController?.abort()
+})
 </script>
 
 <template>
@@ -407,7 +714,7 @@ onUnmounted(() => currentEventSource?.close())
         <div class="app-info-group">
           <span class="app-name">{{ appName }}</span>
           <span class="status-dot" :class="'dot-' + (sending ? 'generating' : appStatus)" />
-          <span class="status-text">{{ sending ? '生成中' : statusLabel }}</span>
+          <span class="status-text">{{ statusLabel }}</span>
         </div>
       </div>
 
@@ -459,7 +766,7 @@ onUnmounted(() => currentEventSource?.close())
         <div ref="messagesAreaRef" class="messages-area" @scroll="handleMessagesScroll">
           <a-spin v-if="loadingApp" class="loading-spin" />
           <template v-else>
-            <ChatMessage v-for="msg in messages" :key="msg.id" :message="msg" @retry="handleRetry(msg)" />
+            <ChatMessage v-for="msg in messages" :key="msg.id" :message="msg" @retry="handleRetry(msg)" @download="downloadPrd" />
             <div v-if="!messages.length && !loadingApp" class="empty-chat">
               <div class="empty-icon-wrap"><ThunderboltOutlined /></div>
               <p>开始对话，让 AI 为你生成应用</p>
@@ -506,23 +813,12 @@ onUnmounted(() => currentEventSource?.close())
           <div v-else class="preview-content">
             <div class="preview-loading">
               <div class="loading-spinner" />
-              <p class="loading-text">{{ sending ? 'AI 正在生成应用代码...' : '准备就绪，等待生成...' }}</p>
-              <div class="loading-steps">
-                <div class="step" :class="{ active: true }">
-                  <span class="step-dot" />
-                  <span>分析需求</span>
-                </div>
-                <div class="step-line" />
-                <div class="step" :class="{ active: sending }">
-                  <span class="step-dot" />
-                  <span>生成代码</span>
-                </div>
-                <div class="step-line" />
-                <div class="step" :class="{ active: false }">
-                  <span class="step-dot" />
-                  <span>预览部署</span>
-                </div>
-              </div>
+              <p class="loading-text">{{ sending ? 'AI 工作流运行中...' : '准备就绪，等待生成...' }}</p>
+              <WorkflowProgress
+                :current-node="currentNode"
+                :running="sending"
+                :retry-count="retryCount"
+              />
             </div>
           </div>
         </template>
@@ -545,23 +841,12 @@ onUnmounted(() => currentEventSource?.close())
             />
             <div v-else class="preview-loading">
               <div class="loading-spinner" />
-              <p class="loading-text">{{ sending ? 'AI 正在生成应用代码...' : '准备就绪，等待生成...' }}</p>
-              <div class="loading-steps">
-                <div class="step" :class="{ active: true }">
-                  <span class="step-dot" />
-                  <span>分析需求</span>
-                </div>
-                <div class="step-line" />
-                <div class="step" :class="{ active: sending }">
-                  <span class="step-dot" />
-                  <span>生成代码</span>
-                </div>
-                <div class="step-line" />
-                <div class="step" :class="{ active: false }">
-                  <span class="step-dot" />
-                  <span>预览部署</span>
-                </div>
-              </div>
+              <p class="loading-text">{{ sending ? 'AI 工作流运行中...' : '准备就绪，等待生成...' }}</p>
+              <WorkflowProgress
+                :current-node="currentNode"
+                :running="sending"
+                :retry-count="retryCount"
+              />
             </div>
           </div>
         </template>
@@ -1018,50 +1303,6 @@ onUnmounted(() => currentEventSource?.close())
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.2px;
-}
-
-.loading-steps {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  opacity: 0.6;
-}
-
-.step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  transition: all 300ms ease;
-}
-
-.step.active {
-  color: var(--accent);
-  opacity: 1;
-}
-
-.step-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 2px solid var(--glass-border);
-  transition: all 300ms ease;
-  flex-shrink: 0;
-}
-
-.step.active .step-dot {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm);
-}
-
-.step-line {
-  width: 40px;
-  height: 2px;
-  background: var(--glass-border);
-  border-radius: 1px;
 }
 
 /* ============================================

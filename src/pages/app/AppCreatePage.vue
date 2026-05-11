@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { RocketOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { createApp } from '@/api/appController'
-import { reviewPrompt } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 
 const router = useRouter()
@@ -24,16 +23,7 @@ async function handleCreate() {
   }
   loading.value = true
   try {
-    // 预审核提示词
-    const reviewRes = await reviewPrompt(form.initPrompt.trim())
-    if (reviewRes.data?.code === 0 && reviewRes.data.data) {
-      const rd = parseResponseData<{ safe?: boolean; reason?: string }>(reviewRes.data.data)
-      if (rd.safe === false) {
-        message.warning(rd.reason || '提示词未通过安全审核，请修改后重试')
-        return
-      }
-    }
-
+    // 创建应用（安全审查已集成到工作流节点中）
     const res = await createApp({
       initPrompt: form.initPrompt,
       appName: form.appName || undefined,

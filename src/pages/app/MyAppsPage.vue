@@ -131,8 +131,9 @@ onMounted(() => loadApps())
         class="app-card"
         @click="router.push(`/app/${app.id}`)"
       >
-        <div class="card-cover" :style="{ background: getGradient(app.appName || '') }">
-          <span class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
+        <div class="card-cover" :style="!app.cover ? { background: getGradient(app.appName || '') } : {}">
+          <img v-if="app.cover" :src="app.cover" :alt="app.appName" class="cover-img" />
+          <span v-else class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
           <div
             class="card-status"
             :style="{
@@ -308,6 +309,9 @@ onMounted(() => loadApps())
   overflow: hidden;
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-out);
+  height: 320px;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-card:hover {
@@ -317,11 +321,18 @@ onMounted(() => loadApps())
 }
 
 .card-cover {
-  height: 140px;
+  height: 55%;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
 }
 
 .cover-letter {
@@ -344,6 +355,7 @@ onMounted(() => loadApps())
 
 .card-body {
   padding: var(--space-5);
+  flex: 1;
 }
 
 .card-title {

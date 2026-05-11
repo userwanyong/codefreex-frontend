@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { EyeOutlined, LikeOutlined, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined } from '@ant-design/icons-vue'
 import { getFeaturedApps, createApp } from '@/api/appController'
-import { reviewPrompt, optimizePrompt } from '@/api/aiController'
+import { optimizePrompt } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
 import { message } from 'ant-design-vue'
@@ -119,18 +119,8 @@ async function handleCreateApp() {
   }
   creating.value = true
   try {
-    // Step 1: 预审核提示词
+    // 创建应用（安全审查已集成到工作流节点中）
     const text = promptText.value.trim()
-    const reviewRes = await reviewPrompt(text)
-    if (reviewRes.data?.code === 0 && reviewRes.data.data) {
-      const reviewData = parseResponseData<{ safe?: boolean; reason?: string; route?: string }>(reviewRes.data.data)
-      if (reviewData.safe === false) {
-        message.warning(reviewData.reason || '提示词未通过安全审核，请修改后重试')
-        return
-      }
-    }
-
-    // Step 2: 创建应用
     const res = await createApp({ appName: text.slice(0, 6), initPrompt: text })
     if (res.data?.code === 0 && res.data.data) {
       const appData = parseResponseData<API.App>(res.data.data)
@@ -246,8 +236,9 @@ onMounted(() => loadApps())
             class="app-card"
             @click="router.push(`/app/${app.id}`)"
           >
-            <div class="app-cover" :style="{ background: getAppGradient(app.appName || '') }">
-              <span class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
+            <div class="app-cover" :style="!app.cover ? { background: getAppGradient(app.appName || '') } : {}">
+              <img v-if="app.cover" :src="app.cover" :alt="app.appName" class="cover-img" />
+              <span v-else class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
               <div v-if="app.status" class="app-status" :style="{ background: statusColors[app.status] || 'var(--status-draft)' }">
                 {{ statusLabels[app.status] || app.status }}
               </div>
@@ -527,6 +518,9 @@ onMounted(() => loadApps())
   overflow: hidden;
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-out);
+  height: 320px;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-card:hover {
@@ -536,11 +530,18 @@ onMounted(() => loadApps())
 }
 
 .app-cover {
-  height: 140px;
+  height: 55%;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
 }
 
 .cover-letter {
@@ -563,6 +564,7 @@ onMounted(() => loadApps())
 
 .app-info {
   padding: var(--space-5);
+  flex: 1;
 }
 
 .app-name {

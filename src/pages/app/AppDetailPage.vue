@@ -258,8 +258,9 @@ onMounted(() => loadApp())
           <!-- Left: Sidebar -->
           <aside class="detail-sidebar">
             <!-- App Cover -->
-            <div class="sidebar-cover" :style="{ background: getGradient(app.appName || '') }">
-              <span class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
+            <div class="sidebar-cover" :style="!app.cover ? { background: getGradient(app.appName || '') } : {}">
+              <img v-if="app.cover" :src="app.cover" :alt="app.appName" class="cover-img" />
+              <span v-else class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
             </div>
 
             <!-- App Identity -->
@@ -488,10 +489,12 @@ onMounted(() => loadApp())
   overflow: hidden;
   position: sticky;
   top: calc(60px + var(--space-6));
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-cover {
-  height: 160px;
+  height: 55%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -506,6 +509,13 @@ onMounted(() => loadApp())
   right: 0;
   height: 60px;
   background: linear-gradient(transparent, var(--bg-surface));
+}
+
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
 }
 
 .cover-letter {

@@ -210,4 +210,31 @@ declare namespace API {
   type AppStatus = 'draft' | 'generating' | 'generated' | 'deployed' | 'disabled'
   type CodeGenType = 'html' | 'multi_file' | 'vue_project'
   type InviteStatus = 'unused' | 'partial' | 'used' | 'expired' | 'disabled'
+
+  // === Workflow ===
+  type WorkflowNode =
+    | 'promptGuardNode' | 'promptReviewNode' | 'prdGenNode'
+    | 'imagePlanNode' | 'imageFetchNode' | 'promptEnhanceNode'
+    | 'routeNode' | 'codeGenNode' | 'qualityCheckNode' | 'persistNode'
+
+  type WorkflowEventType = 'tool_request' | 'tool_executed' | 'ai_response' | 'done' | 'error'
+
+  type WorkflowEvent = {
+    type: WorkflowEventType
+    data?: unknown
+  }
+
+  type WorkflowStatus = 'idle' | 'running' | 'completed' | 'failed' | 'blocked'
+
+  type WorkflowRoute = 'html' | 'multi_file' | 'vue'
+
+  type WorkflowStatusResponse = {
+    appId: number
+    status: WorkflowStatus
+    currentNode: WorkflowNode | null
+    route: WorkflowRoute | null
+    retryCount: number
+    message: string | null
+    updateTime: string
+  }
 }
