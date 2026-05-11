@@ -19,6 +19,7 @@ const NODE_PHASE_MAP: Record<string, number> = {
   routeNode: 3,
   codeGenNode: 3,
   qualityCheckNode: 4,
+  codeFixNode: 4,
   persistNode: 4,
 }
 
@@ -34,8 +35,9 @@ const NODE_DESCRIPTIONS: Record<string, string> = {
   promptEnhanceNode: '增强提示词...',
   routeNode: '确定生成方案...',
   codeGenNode: 'AI 生成代码中...',
-  qualityCheckNode: '质量验证中...',
-  persistNode: '保存文件中...',
+  qualityCheckNode: '代码质量检查...',
+  codeFixNode: '修复代码...',
+  persistNode: '保存文件...',
 }
 
 const activePhase = computed(() => {

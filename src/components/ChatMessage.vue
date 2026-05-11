@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RobotOutlined, UserOutlined, LoadingOutlined, WarningOutlined, RedoOutlined, DownloadOutlined } from '@ant-design/icons-vue'
+import { RobotOutlined, UserOutlined, LoadingOutlined, RedoOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 
 interface StatusItem {
   icon: string
   label: string
   detail?: string
-  status: 'done' | 'running' | 'error'
+  status: 'done' | 'running' | 'error' | 'warning'
   downloadAction?: string
   nodeKey?: string
 }
@@ -339,6 +339,14 @@ function formatTime(ts: number) {
 
 .st-error .status-icon {
   color: #ef4444;
+}
+
+.st-warning .status-label {
+  color: #eab308;
+}
+
+.st-warning .status-icon {
+  color: #eab308;
 }
 
 /* Actions */

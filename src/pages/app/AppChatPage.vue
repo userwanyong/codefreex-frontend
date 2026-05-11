@@ -29,7 +29,7 @@ interface StatusItem {
   icon: string
   label: string
   detail?: string
-  status: 'done' | 'running' | 'error'
+  status: 'done' | 'running' | 'error' | 'warning'
   downloadAction?: string
   nodeKey?: string
 }
@@ -102,6 +102,8 @@ const NODE_LABELS: Record<string, { icon: string; label: string }> = {
   promptEnhanceNode: { icon: '✨', label: '优化提示词' },
   routeNode: { icon: '🎯', label: '确定生成方案' },
   codeGenNode: { icon: '💻', label: '编写代码' },
+  qualityCheckNode: { icon: '🔍', label: '代码质量检查' },
+  codeFixNode: { icon: '🔧', label: '修复代码' },
   persistNode: { icon: '✅', label: '生成完成' },
 }
 
@@ -113,6 +115,7 @@ const NEXT_NODE: Record<string, string> = {
   imagePlanNode: 'imageFetchNode',
   imageFetchNode: 'promptEnhanceNode',
   promptEnhanceNode: 'routeNode',
+  // qualityCheckNode 是条件边，在 handler 中根据结果动态预显示
 }
 
 
@@ -416,9 +419,10 @@ async function sendToAI(text: string) {
 
       // tool_executed：节点执行完毕 → 更新为 "done" 状态
       if (event.type === 'tool_executed') {
-        const eventData = event.data as { node?: string; message?: string } | undefined
+        const eventData = event.data as { node?: string; message?: string; data?: Record<string, any> } | undefined
         const node = eventData?.node
         const msg = eventData?.message
+        const nodeData = eventData?.data
 
         if (node) {
           // 移除该节点的 "running" 项
@@ -449,6 +453,32 @@ async function sendToAI(text: string) {
             statusItems.push({ icon: '✨', label: '优化提示词', status: 'done', detail: '已完成' })
           } else if (node === 'persistNode') {
             statusItems.push({ icon: '✅', label: '生成完成', status: 'done', detail: '已完成' })
+          } else if (node === 'qualityCheckNode') {
+            const passed = nodeData?.pass ?? (nodeData?.reason?.toLowerCase()?.includes('ok'))
+            statusItems.push({ icon: '🔍', label: '代码质量检查', status: passed ? 'done' : 'warning', detail: passed ? '通过' : nodeData?.reason || '未通过' })
+            if (!isChatMode) {
+              if (passed) {
+                // 质量检查通过 → 直接标记生成完成（persistNode 已合并到 codeGenNode）
+                statusItems.push({ icon: '✅', label: '生成完成', status: 'done', detail: '已完成' })
+              } else {
+                // 未通过 → 预显示 codeFixNode
+                const fixCfg = NODE_LABELS['codeFixNode']
+                if (fixCfg) {
+                  statusItems.push({ icon: fixCfg.icon, label: fixCfg.label, status: 'running', nodeKey: 'codeFixNode' })
+                }
+              }
+            }
+          } else if (node === 'codeFixNode') {
+            statusItems.push({ icon: '🔧', label: '修复代码', status: 'done', detail: nodeData?.summary ? '已完成' : '已完成' })
+            // 修复完成 → 预显示 qualityCheckNode（再次检查）
+            if (!isChatMode) {
+              const qcCfg = NODE_LABELS['qualityCheckNode']
+              if (qcCfg) {
+                statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+              }
+            }
+          } else if (node === 'failNode') {
+            statusItems.push({ icon: '❌', label: '生成失败', status: 'error', detail: nodeData?.reason || '质量检查未通过' })
           }
 
           // 预显示下一个节点，消除后端处理空档
