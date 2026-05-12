@@ -72,3 +72,4 @@ export async function getWorkflowStatus(appId: string) {
     params: { appId },
   })
 }
+

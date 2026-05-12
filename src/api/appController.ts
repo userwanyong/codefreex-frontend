@@ -91,3 +91,10 @@ export async function downloadApp(appId: string) {
     responseType: 'blob',
   })
 }
+
+/** 获取应用代码内容（从文件系统读取） */
+export async function getAppCode(appId: string) {
+  return request<API.BaseResponse<string>>(`/app/${appId}/code`, {
+    method: 'GET',
+  })
+}

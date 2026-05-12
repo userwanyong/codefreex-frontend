@@ -16,9 +16,10 @@ import {
   DownloadOutlined,
   StopOutlined,
   LinkOutlined,
+  CloseOutlined,
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
-import { getApp, deployApp, cancelDeploy, downloadApp } from '@/api/appController'
+import { getApp, deployApp, cancelDeploy, downloadApp, getAppCode } from '@/api/appController'
 import { optimizePrompt, streamWorkflowGenerate, getChatHistory } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import ChatMessage from '@/components/ChatMessage.vue'
@@ -76,7 +77,7 @@ const retryCount = ref(0)
 const codeContent = ref('')
 const prdContent = ref('')
 const historyPrdContent = ref('')
-const historyCodeContent = ref('')
+const fileCodeContent = ref('')
 
 const NODE_DESCRIPTIONS: Record<string, string> = {
   promptGuardNode: '关键词安全检查中...',
@@ -102,6 +103,7 @@ const NODE_LABELS: Record<string, { icon: string; label: string }> = {
   promptEnhanceNode: { icon: '✨', label: '优化提示词' },
   routeNode: { icon: '🎯', label: '确定生成方案' },
   codeGenNode: { icon: '💻', label: '编写代码' },
+  visualEditNode: { icon: '🎨', label: '执行修改' },
   qualityCheckNode: { icon: '🔍', label: '代码质量检查' },
   codeFixNode: { icon: '🔧', label: '修复代码' },
   persistNode: { icon: '✅', label: '生成完成' },
@@ -110,11 +112,12 @@ const NODE_LABELS: Record<string, { icon: string; label: string }> = {
 // 节点完成后预显示下一个节点，消除后端处理空档
 const NEXT_NODE: Record<string, string> = {
   promptReviewNode: 'intentClassifyNode',
-  intentClassifyNode: 'prdGenNode',
-  prdGenNode: 'imagePlanNode',
+  // intentClassifyNode 由 handler 根据意图动态预显示，不在此映射
+  prdGenNode: 'routeNode',
+  routeNode: 'imagePlanNode',
   imagePlanNode: 'imageFetchNode',
   imageFetchNode: 'promptEnhanceNode',
-  promptEnhanceNode: 'routeNode',
+  promptEnhanceNode: 'codeGenNode',
   // qualityCheckNode 是条件边，在 handler 中根据结果动态预显示
 }
 
@@ -135,16 +138,7 @@ const rightView = ref<'code' | 'preview'>('code')
 // Get the latest code content for the right panel
 const currentAIContent = computed(() => {
   if (codeContent.value) return codeContent.value
-  if (historyCodeContent.value) return historyCodeContent.value
-  // Fallback: load from chat history (strip STATUS markers)
-  const aiMsgs = messages.value.filter(m => m.role === 'ai' && m.content)
-  for (let i = aiMsgs.length - 1; i >= 0; i--) {
-    const raw = aiMsgs[i]!.content
-    const stripped = raw.replace(/^<!--STATUS:.*?-->\n?/s, '')
-    if (stripped.includes('```')) {
-      return stripped
-    }
-  }
+  if (fileCodeContent.value) return fileCodeContent.value
   return ''
 })
 
@@ -172,8 +166,8 @@ async function loadApp() {
       // 加载历史对话
       await loadChatHistory()
 
-      // 有代码内容时默认展示预览，否则展示代码
-      if (historyCodeContent.value) rightView.value = 'preview'
+      // 从文件 API 加载代码内容
+      await loadAppCode()
 
       // 仅在无历史记录且有 prompt 参数时自动发送
       if (!messages.value.length && initialPrompt.value && !hasAutoSent) {
@@ -193,6 +187,17 @@ async function loadApp() {
     await nextTick()
     scrollToBottom()
   }
+}
+
+async function loadAppCode() {
+  if (!deployKey.value) return
+  try {
+    const res = await getAppCode(appId.value)
+    if (res.data?.code === 0 && res.data.data) {
+      fileCodeContent.value = res.data.data
+      if (fileCodeContent.value) rightView.value = 'preview'
+    }
+  } catch { /* ignore */ }
 }
 
 async function loadChatHistory() {
@@ -255,9 +260,6 @@ function groupStatusMessages(items: ChatMsg[]): ChatMsg[] {
         if (parsed.item.downloadAction === 'prd' && parsed.memoryContent) {
           historyPrdContent.value = parsed.memoryContent
         }
-        if (parsed.memoryContent.includes('```')) {
-          historyCodeContent.value = parsed.memoryContent
-        }
         if (!groupMsg) groupMsg = item
         continue
       }
@@ -290,11 +292,9 @@ async function loadMoreHistory() {
       historyHasMore = !!pageData.hasNext
       if (historyList.length) {
         const newItems = historyList.map(mapRawHistoryItem)
-        // 加载更早的历史时，保留最新代码/PRD 内容不被旧消息覆盖
-        const savedCode = historyCodeContent.value
+        // 加载更早的历史时，保留最新 PRD 内容不被旧消息覆盖
         const savedPrd = historyPrdContent.value
         messages.value = groupStatusMessages([...newItems, ...messages.value])
-        if (savedCode) historyCodeContent.value = savedCode
         if (savedPrd) historyPrdContent.value = savedPrd
         await nextTick()
         if (el) el.scrollTop = el.scrollHeight - prevHeight
@@ -362,6 +362,7 @@ async function sendToAI(text: string) {
   const statusItems: StatusItem[] = []
   let codeStatusAdded = false
   let isChatMode = false
+  let isVisualEditMode = false
 
   // 对话模式：第二个气泡（文本回复）
   let chatMsgCreated = false
@@ -431,9 +432,39 @@ async function sendToAI(text: string) {
 
           if (node === 'intentClassifyNode' && msg) {
             const isCoding = msg.includes('编码')
-            statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : '普通对话' })
-            if (!isCoding) {
+            const isVisualEdit = msg.includes('可视化编辑')
+            const isChat = !isCoding && !isVisualEdit
+            statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : isVisualEdit ? '可视化编辑' : '普通对话' })
+            if (isChat) {
               isChatMode = true
+            }
+            if (isVisualEdit) {
+              isVisualEditMode = true
+            }
+            // 可视化编辑意图：直接预显示 visualEditNode
+            if (isVisualEdit) {
+              const veCfg = NODE_LABELS['visualEditNode']
+              if (veCfg) {
+                statusItems.push({ icon: veCfg.icon, label: veCfg.label, status: 'running', nodeKey: 'visualEditNode' })
+              }
+              syncStatus()
+            }
+            // 编码意图：预显示 prdGenNode
+            if (isCoding) {
+              const prdCfg = NODE_LABELS['prdGenNode']
+              if (prdCfg) {
+                statusItems.push({ icon: prdCfg.icon, label: prdCfg.label, status: 'running', nodeKey: 'prdGenNode' })
+              }
+              syncStatus()
+            }
+          } else if (node === 'visualEditNode') {
+            statusItems.push({ icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' })
+            // 预显示 qualityCheckNode
+            if (!isChatMode) {
+              const qcCfg = NODE_LABELS['qualityCheckNode']
+              if (qcCfg) {
+                statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+              }
             }
           } else if (node === 'chatDirectNode') {
             // 对话模式不添加状态项
@@ -458,8 +489,7 @@ async function sendToAI(text: string) {
             statusItems.push({ icon: '🔍', label: '代码质量检查', status: passed ? 'done' : 'warning', detail: passed ? '通过' : nodeData?.reason || '未通过' })
             if (!isChatMode) {
               if (passed) {
-                // 质量检查通过 → 直接标记生成完成（persistNode 已合并到 codeGenNode）
-                statusItems.push({ icon: '✅', label: '生成完成', status: 'done', detail: '已完成' })
+                statusItems.push({ icon: '✅', label: isVisualEditMode ? '修改完成' : '生成完成', status: 'done', detail: '已完成' })
               } else {
                 // 未通过 → 预显示 codeFixNode
                 const fixCfg = NODE_LABELS['codeFixNode']
@@ -516,8 +546,11 @@ async function sendToAI(text: string) {
             // 清理可能残留的 codeGenNode 预显示项
             const cgIdx = statusItems.findIndex(it => it.nodeKey === 'codeGenNode')
             if (cgIdx >= 0) statusItems.splice(cgIdx, 1)
-            statusItems.push({ icon: '💻', label: '编写代码', status: 'running', nodeKey: 'codeWriting' })
-            syncStatus()
+            // 可视化编辑模式不显示"编写代码"状态（已有"执行修改"状态）
+            if (!isVisualEditMode) {
+              statusItems.push({ icon: '💻', label: '编写代码', status: 'running', nodeKey: 'codeWriting' })
+              syncStatus()
+            }
           }
           scrollToBottom()
         }
@@ -558,6 +591,7 @@ async function sendToAI(text: string) {
       currentNode.value = null
       currentAbortController = null
       appStatus.value = 'generated'
+      loadAppCode()
       refreshAppInfo()
       scrollToBottom()
     },
@@ -597,8 +631,17 @@ async function handleSend() {
   const text = inputText.value.trim()
   if (!text || sending.value) return
   inputText.value = ''
-  addMessage('user', text, 'done')
-  await sendToAI(text)
+
+  if (editSelector.value) {
+    const selector = editSelector.value
+    const fullText = `[可视化编辑] 目标元素选择器: ${selector}\n${text}`
+    addMessage('user', `[编辑] 目标元素: ${selector}\n${text}`, 'done')
+    editSelector.value = ''
+    await sendToAI(fullText)
+  } else {
+    addMessage('user', text, 'done')
+    await sendToAI(text)
+  }
 }
 
 async function handleRetry(msg: ChatMsg) {
@@ -637,6 +680,129 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 function refreshPreview() { previewKey.value += 1 }
+
+// Visual edit mode
+const editMode = ref(false)
+const editSelector = ref('')
+
+function toggleEditMode() {
+  if (!deployKey.value) {
+    message.warning('请先生成应用后再编辑')
+    return
+  }
+  editMode.value = !editMode.value
+  if (editMode.value) {
+    rightView.value = 'preview'
+    message.info('点击预览中的应用元素来选择要编辑的部分')
+  } else {
+    clearHighlight()
+  }
+  editSelector.value = ''
+}
+
+function handleIframeClick(e: MessageEvent) {
+  if (!editMode.value) return
+  const data = e.data
+  if (data?.type === 'visual-edit-select') {
+    editSelector.value = data.selector
+  }
+}
+
+function buildSelector(el: Element, root: Element): string {
+  if (el === root || !el.parentElement) return ''
+  const parts: string[] = []
+  let current: Element | null = el
+  while (current && current !== root) {
+    const tag = current.tagName.toLowerCase()
+    if (current.id) {
+      parts.unshift(`#${current.id}`)
+      break
+    }
+    const parent: Element | null = current.parentElement
+    if (parent) {
+      const siblings = Array.from(parent.children).filter((c: Element) => c.tagName === current!.tagName)
+      const idx = siblings.indexOf(current)
+      parts.unshift(siblings.length > 1 ? `${tag}:nth-of-type(${idx + 1})` : tag)
+    } else {
+      parts.unshift(tag)
+    }
+    current = parent
+  }
+  return parts.join(' > ')
+}
+
+function ensureHighlightEl(iframe: HTMLIFrameElement) {
+  let el = iframe.contentDocument!.getElementById('__ve_highlight__')
+  if (!el) {
+    el = iframe.contentDocument!.createElement('div')
+    el.id = '__ve_highlight__'
+    el.style.cssText = 'position:fixed;pointer-events:none;border:2px solid #1890ff;background:rgba(24,144,255,0.08);z-index:99999;transition:all .1s ease;border-radius:3px;'
+    iframe.contentDocument!.body.appendChild(el)
+  }
+  return el
+}
+
+function positionHighlight(iframe: HTMLIFrameElement, target: HTMLElement) {
+  try {
+    const highlight = ensureHighlightEl(iframe)
+    const r = target.getBoundingClientRect()
+    highlight.style.top = r.top + 'px'
+    highlight.style.left = r.left + 'px'
+    highlight.style.width = r.width + 'px'
+    highlight.style.height = r.height + 'px'
+    highlight.style.display = 'block'
+  } catch { /* cross-origin */ }
+}
+
+function clearHighlight() {
+  const iframe = document.querySelector('.preview-iframe') as HTMLIFrameElement
+  if (!iframe?.contentDocument) return
+  try {
+    const prev = iframe.contentDocument.getElementById('__ve_highlight__')
+    if (prev) prev.remove()
+  } catch { /* cross-origin */ }
+}
+
+function resolveElement(e: MouseEvent) {
+  const overlay = e.currentTarget as HTMLElement
+  const iframe = overlay.previousElementSibling as HTMLIFrameElement
+  if (!iframe?.contentDocument) return null
+
+  const rect = iframe.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+
+  overlay.style.pointerEvents = 'none'
+  const el = iframe.contentDocument.elementFromPoint(x, y) as HTMLElement | null
+  overlay.style.pointerEvents = 'auto'
+
+  if (!el || el === iframe.contentDocument.body || el === iframe.contentDocument.documentElement) return null
+  return { el, iframe }
+}
+
+function handleEditOverlayMove(e: MouseEvent) {
+  if (!editMode.value) return
+  const result = resolveElement(e)
+  if (!result) return
+  positionHighlight(result.iframe, result.el)
+}
+
+function handleEditOverlayClick(e: MouseEvent) {
+  if (!editMode.value) return
+  const result = resolveElement(e)
+  if (!result) {
+    message.warning('请点击具体的页面元素')
+    return
+  }
+  const { el, iframe } = result
+
+  editSelector.value = buildSelector(el, iframe.contentDocument!.body)
+
+  // 退出编辑模式，清除高亮
+  editMode.value = false
+  clearHighlight()
+  message.success('已选中元素，请在左侧输入修改指令')
+}
 
 async function refreshAppInfo() {
   try {
@@ -726,10 +892,14 @@ async function handleDownload() {
   }
 }
 
-onMounted(() => loadApp())
+onMounted(() => {
+  loadApp()
+  window.addEventListener('message', handleIframeClick)
+})
 onUnmounted(() => {
   currentEventSource?.close()
   currentAbortController?.abort()
+  window.removeEventListener('message', handleIframeClick)
 })
 </script>
 
@@ -809,20 +979,29 @@ onUnmounted(() => {
         <div class="input-area">
           <div class="input-toolbar">
             <button class="tool-btn"><PaperClipOutlined /> 上传</button>
-            <button class="tool-btn"><EditOutlined /> 编辑</button>
+            <button class="tool-btn" :class="{ active: editMode }" @click="toggleEditMode"><EditOutlined /> {{ editMode ? '退出编辑' : '编辑' }}</button>
             <button class="tool-btn optimize-btn" :class="{ loading: optimizing }" @click="handleOptimize">
               <ThunderboltOutlined /> 优化
             </button>
           </div>
           <div class="input-row">
-            <textarea
-              v-model="inputText"
-              class="msg-input"
-              placeholder="描述详细、页面越具体，可以一步一步完善生成效果"
-              rows="3"
-              :disabled="sending"
-              @keydown="handleKeydown"
-            />
+            <div class="input-field-wrap">
+              <div v-if="editSelector" class="edit-target-tag">
+                <EditOutlined style="margin-right: 4px" />
+                <span class="edit-target-label">已选中元素</span>
+                <button class="edit-target-clear" @click="editSelector = ''">
+                  <CloseOutlined style="font-size: 10px" />
+                </button>
+              </div>
+              <textarea
+                v-model="inputText"
+                :class="['msg-input', { 'has-tag': editSelector }]"
+                :placeholder="editSelector ? '输入修改指令，如：将背景色改为蓝色' : '描述详细、页面越具体，可以一步一步完善生成效果'"
+                rows="3"
+                :disabled="sending"
+                @keydown="handleKeydown"
+              />
+            </div>
             <button class="send-btn" :class="{ active: inputText.trim() && !sending }" :disabled="!inputText.trim() || sending" @click="handleSend">
               <LoadingOutlined v-if="sending" />
               <SendOutlined v-else />
@@ -859,15 +1038,24 @@ onUnmounted(() => {
             <span class="preview-title">
               <EyeOutlined /> 应用预览
             </span>
+            <a-tag v-if="editMode" color="blue" style="margin-left: 8px">编辑模式 - 点击元素选择</a-tag>
           </div>
-          <div class="preview-content">
+          <div class="preview-content" style="position: relative">
             <iframe
               v-if="deployKey"
               :key="previewKey"
               :src="previewUrl"
               class="preview-iframe"
+              :class="{ 'edit-mode': editMode }"
               sandbox="allow-scripts allow-same-origin"
               frameborder="0"
+            />
+            <!-- 编辑模式覆盖层：拦截点击，定位 iframe 内元素 -->
+            <div
+              v-if="editMode && deployKey"
+              class="edit-overlay"
+              @mousemove="handleEditOverlayMove"
+              @click="handleEditOverlayClick"
             />
             <div v-else class="preview-loading">
               <div class="loading-spinner" />
@@ -1221,11 +1409,20 @@ onUnmounted(() => {
   padding: 8px 16px 14px;
 }
 
-.msg-input {
+.input-field-wrap {
   flex: 1;
   background: var(--bg-elevated);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+  overflow: hidden;
+}
+.input-field-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--shadow-sm); }
+
+.msg-input {
+  width: 100%;
+  background: transparent;
+  border: none;
   padding: 12px 16px;
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -1233,10 +1430,9 @@ onUnmounted(() => {
   line-height: 1.55;
   resize: none;
   outline: none;
-  transition: border-color 200ms ease, box-shadow 200ms ease;
 }
+.msg-input.has-tag { padding-top: 6px; }
 
-.msg-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--shadow-sm); }
 .msg-input::placeholder { color: var(--text-muted); }
 .msg-input:disabled { opacity: 0.5; pointer-events: none; }
 
@@ -1301,6 +1497,77 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   background: white;
+}
+.preview-iframe.edit-mode {
+  outline: 2px solid #1890ff;
+  outline-offset: -2px;
+}
+
+/* Edit mode overlay */
+.edit-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 80px; /* leave space for instruction bar */
+  cursor: crosshair;
+  z-index: 5;
+}
+
+/* Edit button active state */
+.tool-btn.active {
+  background: #1890ff;
+  color: #fff;
+  border-color: #1890ff;
+}
+
+/* Edit target tag inside input field */
+.edit-target-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  margin: 10px 16px 0;
+  background: #e6f4ff;
+  border: 1px solid #91caff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+.edit-target-tag code {
+  background: var(--bg-primary, #fff);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #1890ff;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.edit-target-label {
+  color: #1890ff;
+  font-weight: 500;
+}
+.edit-target-clear {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 0;
+  flex-shrink: 0;
+}
+.edit-target-clear:hover {
+  background: rgba(0,0,0,0.06);
+  color: var(--text-primary);
 }
 
 /* Loading State */
