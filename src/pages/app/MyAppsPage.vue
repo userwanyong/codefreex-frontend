@@ -4,8 +4,6 @@ import { useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {
   PlusOutlined,
-  EyeOutlined,
-  LikeOutlined,
   DeleteOutlined,
   RocketOutlined,
   CodeOutlined,
@@ -31,12 +29,14 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 }
 
 const darkGradients = [
-  'linear-gradient(135deg, #065F46 0%, #064E3B 100%)',
-  'linear-gradient(135deg, #1E3A5F 0%, #1E293B 100%)',
-  'linear-gradient(135deg, #4C1D95 0%, #2D1B69 100%)',
-  'linear-gradient(135deg, #92400E 0%, #78350F 100%)',
-  'linear-gradient(135deg, #065F46 0%, #1E3A5F 100%)',
-  'linear-gradient(135deg, #4C1D95 0%, #065F46 100%)',
+  'linear-gradient(135deg, #065F46 0%, #10B981 100%)',
+  'linear-gradient(135deg, #1E3A5F 0%, #3B82F6 100%)',
+  'linear-gradient(135deg, #4C1D95 0%, #8B5CF6 100%)',
+  'linear-gradient(135deg, #92400E 0%, #F59E0B 100%)',
+  'linear-gradient(135deg, #991B1B 0%, #EF4444 100%)',
+  'linear-gradient(135deg, #065F46 0%, #3B82F6 100%)',
+  'linear-gradient(135deg, #4C1D95 0%, #10B981 100%)',
+  'linear-gradient(135deg, #1E3A5F 0%, #8B5CF6 100%)',
 ]
 
 const lightGradients = [
@@ -44,15 +44,69 @@ const lightGradients = [
   'linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%)',
   'linear-gradient(135deg, #DDD6FE 0%, #C4B5FD 100%)',
   'linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%)',
+  'linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%)',
   'linear-gradient(135deg, #A7F3D0 0%, #BFDBFE 100%)',
   'linear-gradient(135deg, #DDD6FE 0%, #A7F3D0 100%)',
+  'linear-gradient(135deg, #BFDBFE 0%, #DDD6FE 100%)',
 ]
 
-function getGradient(name: string) {
+const infoBgLight = [
+  'rgba(167, 243, 208, 0.28)',
+  'rgba(191, 219, 254, 0.28)',
+  'rgba(221, 214, 254, 0.28)',
+  'rgba(253, 230, 138, 0.28)',
+  'rgba(254, 202, 202, 0.28)',
+  'rgba(167, 243, 208, 0.20)',
+  'rgba(221, 214, 254, 0.20)',
+  'rgba(191, 219, 254, 0.20)',
+]
+
+const infoBgDark = [
+  'rgba(16, 185, 129, 0.12)',
+  'rgba(59, 130, 246, 0.12)',
+  'rgba(139, 92, 246, 0.12)',
+  'rgba(245, 158, 11, 0.12)',
+  'rgba(239, 68, 68, 0.12)',
+  'rgba(59, 130, 246, 0.09)',
+  'rgba(16, 185, 129, 0.09)',
+  'rgba(139, 92, 246, 0.09)',
+]
+
+function djb2Hash(str: string) {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i)
+  }
+  return hash >>> 0
+}
+
+function getColorIndex(id: string) {
+  return djb2Hash(id || '') % darkGradients.length
+}
+
+function getGradient(id: string) {
   const isLight = document.documentElement.getAttribute('data-theme') === 'light'
-  const gradients = isLight ? lightGradients : darkGradients
-  const hash = (name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-  return gradients[hash % gradients.length]
+  return (isLight ? lightGradients : darkGradients)[getColorIndex(id)]
+}
+
+function getAppInfoBg(id: string) {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+  return (isLight ? infoBgLight : infoBgDark)[getColorIndex(id)]
+}
+
+const tagColors = [
+  { background: 'rgba(34, 197, 94, 0.55)', border: '1px solid rgba(34, 197, 94, 0.3)' },
+  { background: 'rgba(59, 130, 246, 0.55)', border: '1px solid rgba(59, 130, 246, 0.3)' },
+  { background: 'rgba(168, 85, 247, 0.55)', border: '1px solid rgba(168, 85, 247, 0.3)' },
+  { background: 'rgba(245, 158, 11, 0.55)', border: '1px solid rgba(245, 158, 11, 0.3)' },
+  { background: 'rgba(239, 68, 68, 0.55)', border: '1px solid rgba(239, 68, 68, 0.3)' },
+  { background: 'rgba(20, 184, 166, 0.55)', border: '1px solid rgba(20, 184, 166, 0.3)' },
+  { background: 'rgba(236, 72, 153, 0.55)', border: '1px solid rgba(236, 72, 153, 0.3)' },
+  { background: 'rgba(99, 102, 241, 0.55)', border: '1px solid rgba(99, 102, 241, 0.3)' },
+]
+
+function getTagColor(tag: string) {
+  return tagColors[djb2Hash(tag) % tagColors.length]
 }
 
 async function loadApps() {
@@ -131,7 +185,7 @@ onMounted(() => loadApps())
         class="app-card"
         @click="router.push(`/app/${app.id}`)"
       >
-        <div class="card-cover" :style="!app.cover ? { background: getGradient(app.appName || '') } : {}">
+        <div class="card-cover" :style="!app.cover ? { background: getGradient(app.id || '') } : {}">
           <img v-if="app.cover" :src="app.cover" :alt="app.appName" class="cover-img" />
           <span v-else class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
           <div
@@ -145,21 +199,15 @@ onMounted(() => loadApps())
           </div>
         </div>
 
-        <div class="card-body">
+        <div class="card-body" :style="{ background: getAppInfoBg(app.id || '') }">
           <h3 class="card-title">{{ app.appName || '未命名应用' }}</h3>
           <p class="card-desc">{{ app.description || '暂无描述' }}</p>
 
           <div class="card-footer">
-            <div class="card-stats">
-              <span class="stat">
-                <EyeOutlined />
-                {{ app.viewCount ?? 0 }}
-              </span>
-              <span class="stat">
-                <LikeOutlined />
-                {{ app.likeCount ?? 0 }}
-              </span>
+            <div v-if="app.tags?.length" class="card-tags">
+              <span v-for="tag in app.tags.slice(0, 3)" :key="tag" class="my-tag" :style="getTagColor(tag)">{{ tag }}</span>
             </div>
+            <span v-else class="card-tags-empty">暂无标签</span>
             <div class="card-actions">
               <a-button
                 type="text"
@@ -309,7 +357,6 @@ onMounted(() => loadApps())
   overflow: hidden;
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-out);
-  height: 320px;
   display: flex;
   flex-direction: column;
 }
@@ -321,7 +368,7 @@ onMounted(() => loadApps())
 }
 
 .card-cover {
-  height: 55%;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -354,15 +401,14 @@ onMounted(() => loadApps())
 }
 
 .card-body {
-  padding: var(--space-5);
-  flex: 1;
+  padding: var(--space-4) var(--space-5);
 }
 
 .card-title {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 var(--space-2);
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -371,11 +417,10 @@ onMounted(() => loadApps())
 .card-desc {
   font-size: 13px;
   color: var(--text-muted);
-  margin: 0 0 var(--space-4);
+  margin: 0 0 var(--space-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-height: 20px;
 }
 
 .card-footer {
@@ -384,17 +429,26 @@ onMounted(() => loadApps())
   justify-content: space-between;
 }
 
-.card-stats {
+.card-tags {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
 }
 
-.stat {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+.card-tags-empty {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-disabled);
+}
+
+.my-tag {
+  padding: 2px 8px;
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
 }
 
 .card-actions {

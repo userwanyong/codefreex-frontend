@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { EyeOutlined, LikeOutlined, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined } from '@ant-design/icons-vue'
+import { EyeOutlined, LikeOutlined, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { getFeaturedApps, createApp } from '@/api/appController'
 import { optimizePrompt } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
@@ -36,31 +36,53 @@ const statusLabels: Record<string, string> = {
   disabled: '已禁用',
 }
 
-function getAppGradient(name: string) {
+const palettes = [
+  { light: 'rgba(167, 243, 208, 0.28)', dark: 'rgba(16, 185, 129, 0.12)', gradientLight: 'linear-gradient(135deg, #A7F3D0 0%, #6EE7B7 100%)', gradientDark: 'linear-gradient(135deg, #065F46 0%, #10B981 100%)' },
+  { light: 'rgba(191, 219, 254, 0.28)', dark: 'rgba(59, 130, 246, 0.12)', gradientLight: 'linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%)', gradientDark: 'linear-gradient(135deg, #1E3A5F 0%, #3B82F6 100%)' },
+  { light: 'rgba(221, 214, 254, 0.28)', dark: 'rgba(139, 92, 246, 0.12)', gradientLight: 'linear-gradient(135deg, #DDD6FE 0%, #C4B5FD 100%)', gradientDark: 'linear-gradient(135deg, #4C1D95 0%, #8B5CF6 100%)' },
+  { light: 'rgba(253, 230, 138, 0.28)', dark: 'rgba(245, 158, 11, 0.12)', gradientLight: 'linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%)', gradientDark: 'linear-gradient(135deg, #92400E 0%, #F59E0B 100%)' },
+  { light: 'rgba(254, 202, 202, 0.28)', dark: 'rgba(239, 68, 68, 0.12)', gradientLight: 'linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%)', gradientDark: 'linear-gradient(135deg, #991B1B 0%, #EF4444 100%)' },
+  { light: 'rgba(167, 243, 208, 0.20)', dark: 'rgba(59, 130, 246, 0.09)', gradientLight: 'linear-gradient(135deg, #A7F3D0 0%, #BFDBFE 100%)', gradientDark: 'linear-gradient(135deg, #065F46 0%, #3B82F6 100%)' },
+  { light: 'rgba(221, 214, 254, 0.20)', dark: 'rgba(16, 185, 129, 0.09)', gradientLight: 'linear-gradient(135deg, #DDD6FE 0%, #A7F3D0 100%)', gradientDark: 'linear-gradient(135deg, #4C1D95 0%, #10B981 100%)' },
+  { light: 'rgba(191, 219, 254, 0.20)', dark: 'rgba(139, 92, 246, 0.09)', gradientLight: 'linear-gradient(135deg, #BFDBFE 0%, #DDD6FE 100%)', gradientDark: 'linear-gradient(135deg, #1E3A5F 0%, #8B5CF6 100%)' },
+]
+
+function djb2Hash(str: string) {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i)
+  }
+  return hash >>> 0
+}
+
+function getPalette(id: string) {
+  const hash = djb2Hash(id || '')
+  return palettes[hash % palettes.length]
+}
+
+function getAppInfoBg(id: string) {
   const isLight = document.documentElement.getAttribute('data-theme') === 'light'
-  const gradients = isLight
-    ? [
-        'linear-gradient(135deg, #A7F3D0 0%, #6EE7B7 100%)',
-        'linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%)',
-        'linear-gradient(135deg, #DDD6FE 0%, #C4B5FD 100%)',
-        'linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%)',
-        'linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%)',
-        'linear-gradient(135deg, #A7F3D0 0%, #BFDBFE 100%)',
-        'linear-gradient(135deg, #DDD6FE 0%, #A7F3D0 100%)',
-        'linear-gradient(135deg, #BFDBFE 0%, #DDD6FE 100%)',
-      ]
-    : [
-        'linear-gradient(135deg, #065F46 0%, #064E3B 100%)',
-        'linear-gradient(135deg, #1E3A5F 0%, #1E293B 100%)',
-        'linear-gradient(135deg, #4C1D95 0%, #2D1B69 100%)',
-        'linear-gradient(135deg, #92400E 0%, #78350F 100%)',
-        'linear-gradient(135deg, #991B1B 0%, #7F1D1D 100%)',
-        'linear-gradient(135deg, #065F46 0%, #1E3A5F 100%)',
-        'linear-gradient(135deg, #4C1D95 0%, #065F46 100%)',
-        'linear-gradient(135deg, #1E3A5F 0%, #4C1D95 100%)',
-      ]
-  const hash = (name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-  return gradients[hash % gradients.length]
+  return getPalette(id)[isLight ? 'light' : 'dark']
+}
+
+function getAppCoverGradient(id: string) {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+  return getPalette(id)[isLight ? 'gradientLight' : 'gradientDark']
+}
+
+const tagColors = [
+  { background: 'rgba(34, 197, 94, 0.55)', border: '1px solid rgba(34, 197, 94, 0.3)' },
+  { background: 'rgba(59, 130, 246, 0.55)', border: '1px solid rgba(59, 130, 246, 0.3)' },
+  { background: 'rgba(168, 85, 247, 0.55)', border: '1px solid rgba(168, 85, 247, 0.3)' },
+  { background: 'rgba(245, 158, 11, 0.55)', border: '1px solid rgba(245, 158, 11, 0.3)' },
+  { background: 'rgba(239, 68, 68, 0.55)', border: '1px solid rgba(239, 68, 68, 0.3)' },
+  { background: 'rgba(20, 184, 166, 0.55)', border: '1px solid rgba(20, 184, 166, 0.3)' },
+  { background: 'rgba(236, 72, 153, 0.55)', border: '1px solid rgba(236, 72, 153, 0.3)' },
+  { background: 'rgba(99, 102, 241, 0.55)', border: '1px solid rgba(99, 102, 241, 0.3)' },
+]
+
+function getTagColor(tag: string) {
+  return tagColors[djb2Hash(tag) % tagColors.length]
 }
 
 async function loadApps(isLoadMore = false) {
@@ -236,27 +258,36 @@ onMounted(() => loadApps())
             class="app-card"
             @click="router.push(`/app/${app.id}`)"
           >
-            <div class="app-cover" :style="!app.cover ? { background: getAppGradient(app.appName || '') } : {}">
+            <div class="app-cover" :style="!app.cover ? { background: getAppCoverGradient(app.id || '') } : {}">
               <img v-if="app.cover" :src="app.cover" :alt="app.appName" class="cover-img" />
               <span v-else class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
               <div v-if="app.status" class="app-status" :style="{ background: statusColors[app.status] || 'var(--status-draft)' }">
                 {{ statusLabels[app.status] || app.status }}
               </div>
+              <div v-if="app.tags?.length" class="app-tags">
+                <span v-for="tag in app.tags.slice(0, 2)" :key="tag" class="tag" :style="getTagColor(tag)">{{ tag }}</span>
+              </div>
             </div>
-            <div class="app-info">
+            <div class="app-info" :style="{ background: getAppInfoBg(app.id || '') }">
               <h3 class="app-name">{{ app.appName || '未命名应用' }}</h3>
               <p class="app-desc">{{ app.description || '暂无描述' }}</p>
               <div class="app-meta">
-                <span class="meta-item">
-                  <EyeOutlined />
-                  {{ app.viewCount ?? 0 }}
-                </span>
-                <span class="meta-item">
-                  <LikeOutlined />
-                  {{ app.likeCount ?? 0 }}
-                </span>
-                <div v-if="app.tags?.length" class="app-tags">
-                  <span v-for="tag in app.tags.slice(0, 2)" :key="tag" class="tag">{{ tag }}</span>
+                <div class="meta-author">
+                  <img v-if="app.userAvatar" :src="app.userAvatar" class="author-avatar" />
+                  <span v-else class="author-avatar-placeholder">
+                    <UserOutlined />
+                  </span>
+                  <span class="author-name">{{ app.userName || '匿名用户' }}</span>
+                </div>
+                <div class="meta-stats">
+                  <span class="meta-item">
+                    <EyeOutlined />
+                    {{ app.viewCount ?? 0 }}
+                  </span>
+                  <span class="meta-item">
+                    <LikeOutlined />
+                    {{ app.likeCount ?? 0 }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -518,7 +549,6 @@ onMounted(() => loadApps())
   overflow: hidden;
   cursor: pointer;
   transition: all var(--duration-normal) var(--ease-out);
-  height: 320px;
   display: flex;
   flex-direction: column;
 }
@@ -530,7 +560,7 @@ onMounted(() => loadApps())
 }
 
 .app-cover {
-  height: 55%;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -589,7 +619,51 @@ onMounted(() => loadApps())
 .app-meta {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+}
+
+.meta-author {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.author-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.author-avatar-placeholder {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.author-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  margin-left: auto;
+  margin-right: var(--space-1);
 }
 
 .meta-item {
@@ -601,17 +675,20 @@ onMounted(() => loadApps())
 }
 
 .app-tags {
+  position: absolute;
+  bottom: var(--space-2);
+  right: var(--space-2);
   display: flex;
   gap: var(--space-1);
-  margin-left: auto;
 }
 
 .tag {
-  padding: 1px 8px;
-  background: var(--bg-elevated);
+  padding: 2px 8px;
+  backdrop-filter: blur(8px);
   border-radius: var(--radius-sm);
   font-size: 11px;
-  color: var(--text-secondary);
+  font-weight: 500;
+  color: #fff;
 }
 
 /* Empty state */

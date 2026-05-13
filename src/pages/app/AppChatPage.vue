@@ -3,14 +3,10 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   SendOutlined,
-  PaperClipOutlined,
   EditOutlined,
-  ThunderboltOutlined,
   LoadingOutlined,
   ArrowLeftOutlined,
   GlobalOutlined,
-  BulbOutlined,
-  EyeInvisibleOutlined,
   CodeOutlined,
   EyeOutlined,
   DownloadOutlined,
@@ -20,7 +16,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { getApp, deployApp, cancelDeploy, downloadApp, getAppCode } from '@/api/appController'
-import { optimizePrompt, streamWorkflowGenerate, getChatHistory } from '@/api/aiController'
+import { streamWorkflowGenerate, getChatHistory } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CodeFilesPanel from '@/components/CodeFilesPanel.vue'
@@ -60,7 +56,6 @@ const loadingApp = ref(true)
 const messages = ref<ChatMsg[]>([])
 const inputText = ref('')
 const sending = ref(false)
-const optimizing = ref(false)
 const chatEndRef = ref<HTMLElement | null>(null)
 const messagesAreaRef = ref<HTMLElement | null>(null)
 let currentAbortController: AbortController | null = null
@@ -132,9 +127,6 @@ function genId() {
 // Preview
 const previewUrl = computed(() => (deployKey.value ? `/api/static/${deployKey.value}/` : ''))
 const deployedUrl = computed(() => (deployKey.value ? `/api/deploy/${deployKey.value}/` : ''))
-const showPreview = ref(true)
-
-// Right panel view: 'code' | 'preview'
 const rightView = ref<'code' | 'preview'>('code')
 
 // Get the latest code content for the right panel
@@ -688,22 +680,6 @@ async function handleRetry(msg: ChatMsg) {
   await sendToAI(userMsg.content)
 }
 
-async function handleOptimize() {
-  const text = inputText.value.trim()
-  if (!text) { message.warning('请先输入内容'); return }
-  optimizing.value = true
-  try {
-    const res = await optimizePrompt(text)
-    if (res.data?.code === 0 && res.data.data) {
-      inputText.value = typeof res.data.data === 'string' ? res.data.data : String(res.data.data)
-      message.success('提示词已优化')
-    } else {
-      message.warning(res.data?.message || '优化失败，使用原始提示词')
-    }
-  } catch { message.error('优化失败，请检查网络') }
-  finally { optimizing.value = false }
-}
-
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
 }
@@ -941,17 +917,19 @@ onUnmounted(() => {
         </a-button>
         <div class="app-info-group">
           <span class="app-name">{{ appName }}</span>
-          <span class="status-dot" :class="'dot-' + (sending ? 'generating' : appStatus)" />
-          <span class="status-text">{{ statusLabel }}</span>
+          <span class="status-badge" :class="'badge-' + (sending ? 'generating' : appStatus)">
+            <span class="status-dot" :class="'dot-' + (sending ? 'generating' : appStatus)" />
+            {{ statusLabel }}
+          </span>
         </div>
       </div>
 
       <div class="topbar-right">
         <div class="view-switcher">
-          <button class="switch-btn" :class="{ active: rightView === 'code' }" @click="rightView = 'code'; showPreview = true">
+          <button class="switch-btn" :class="{ active: rightView === 'code' }" @click="rightView = 'code'">
             <CodeOutlined /> 代码
           </button>
-          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'; showPreview = true" :disabled="!deployKey || sending">
+          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'" :disabled="!deployKey || sending">
             <EyeOutlined /> 预览
           </button>
         </div>
@@ -979,10 +957,6 @@ onUnmounted(() => {
           <DownloadOutlined /> 下载
         </a-button>
 
-        <a-button type="text" size="small" class="toggle-btn" @click="showPreview = !showPreview">
-          <BulbOutlined v-if="showPreview" />
-          <EyeInvisibleOutlined v-else />
-        </a-button>
       </div>
     </div>
 
@@ -1005,13 +979,6 @@ onUnmounted(() => {
 
         <!-- Input Area -->
         <div class="input-area">
-          <div class="input-toolbar">
-            <button class="tool-btn"><PaperClipOutlined /> 上传</button>
-            <button class="tool-btn" :class="{ active: editMode }" @click="toggleEditMode"><EditOutlined /> {{ editMode ? '退出编辑' : '编辑' }}</button>
-            <button class="tool-btn optimize-btn" :class="{ loading: optimizing }" @click="handleOptimize">
-              <ThunderboltOutlined /> 优化
-            </button>
-          </div>
           <div class="input-row">
             <div class="input-field-wrap">
               <div v-if="editSelector" class="edit-target-tag">
@@ -1029,17 +996,22 @@ onUnmounted(() => {
                 :disabled="sending"
                 @keydown="handleKeydown"
               />
+              <div class="input-bottom-bar">
+                <button class="edit-toggle-btn" :class="{ active: editMode }" @click="toggleEditMode">
+                  <EditOutlined /> {{ editMode ? '退出编辑' : '编辑' }}
+                </button>
+                <button class="send-btn" :class="{ active: inputText.trim() && !sending }" :disabled="!inputText.trim() || sending" @click="handleSend">
+                  <LoadingOutlined v-if="sending" />
+                  <SendOutlined v-else />
+                </button>
+              </div>
             </div>
-            <button class="send-btn" :class="{ active: inputText.trim() && !sending }" :disabled="!inputText.trim() || sending" @click="handleSend">
-              <LoadingOutlined v-if="sending" />
-              <SendOutlined v-else />
-            </button>
           </div>
         </div>
       </div>
 
       <!-- Right: Preview Panel -->
-      <div v-show="showPreview" class="preview-panel">
+      <div class="preview-panel">
         <!-- 代码文件视图 -->
         <template v-if="rightView === 'code'">
           <CodeFilesPanel
@@ -1062,12 +1034,7 @@ onUnmounted(() => {
 
         <!-- 预览视图 -->
         <template v-else>
-          <div class="preview-header">
-            <span class="preview-title">
-              <EyeOutlined /> 应用预览
-            </span>
-            <a-tag v-if="editMode" color="blue" style="margin-left: 8px">编辑模式 - 点击元素选择</a-tag>
-          </div>
+          <a-tag v-if="editMode" color="blue" style="position: absolute; top: 8px; left: 8px; z-index: 10;">编辑模式 - 点击元素选择</a-tag>
           <div class="preview-content" style="position: relative">
             <iframe
               v-if="deployKey"
@@ -1134,8 +1101,12 @@ onUnmounted(() => {
 .back-btn {
   color: var(--text-secondary) !important;
   font-size: 13px;
-  padding: 4px 8px !important;
+  padding: 0 8px !important;
+  height: 28px;
+  line-height: 28px;
   border-radius: var(--radius-sm) !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
 .back-btn:hover { background: var(--bg-elevated) !important; color: var(--text-primary) !important; }
@@ -1143,7 +1114,7 @@ onUnmounted(() => {
 .app-info-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .app-name {
@@ -1153,27 +1124,41 @@ onUnmounted(() => {
   letter-spacing: -0.3px;
 }
 
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.badge-generating { background: rgba(234, 179, 8, 0.1); color: #ca8a04; }
+.badge-generated { background: rgba(34, 197, 94, 0.1); color: #16a34a; }
+.badge-deployed { background: rgba(59, 130, 246, 0.1); color: #2563eb; }
+.badge-draft { background: var(--bg-elevated); color: var(--text-muted); }
+.badge-error { background: rgba(239, 68, 68, 0.1); color: #dc2626; }
+.badge-disabled { background: var(--bg-elevated); color: var(--text-muted); }
+
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .dot-generating { background: #eab308; animation: dotPulse 1.2s infinite; }
 .dot-generated { background: #22c55e; }
+.dot-deployed { background: #3b82f6; }
 .dot-draft { background: var(--text-muted); }
 .dot-error { background: #ef4444; }
+.dot-disabled { background: var(--text-muted); }
 
 @keyframes dotPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.85); }
-}
-
-.status-text {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
 }
 
 .topbar-right {
@@ -1219,15 +1204,6 @@ onUnmounted(() => {
 .switch-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.preview-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .deploy-btn {
@@ -1325,19 +1301,6 @@ onUnmounted(() => {
   color: #2563EB !important;
 }
 
-.toggle-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0 !important;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary) !important;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.toggle-btn:hover { background: var(--bg-elevated) !important; color: var(--text-primary) !important; }
-
 /* ============================================
    Main Layout
    ============================================ */
@@ -1405,30 +1368,39 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.input-toolbar {
+.input-bottom-bar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 8px 16px 0;
+  justify-content: space-between;
+  padding: 0 12px 8px;
 }
 
-.tool-btn {
+.edit-toggle-btn {
   font-size: 12px;
-  height: 28px;
+  height: 26px;
   padding: 0 10px;
   border-radius: var(--radius-sm);
-  color: var(--text-muted) !important;
-  background: transparent !important;
-  border: none !important;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--glass-border);
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  cursor: pointer;
   transition: all 150ms ease;
 }
 
-.tool-btn:hover { color: var(--text-secondary) !important; background: var(--bg-elevated) !important; }
-.optimize-btn:hover { color: var(--accent) !important; background: rgba(34, 197, 94, 0.08) !important; }
-.optimize-btn.loading { color: var(--accent) !important; }
+.edit-toggle-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border-color: var(--border-hover);
+}
+
+.edit-toggle-btn.active {
+  background: #1890ff;
+  color: #fff;
+  border-color: #1890ff;
+}
 
 .input-row {
   display: flex;
@@ -1451,7 +1423,7 @@ onUnmounted(() => {
   width: 100%;
   background: transparent;
   border: none;
-  padding: 12px 16px;
+  padding: 12px 16px 4px;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 14px;
@@ -1465,8 +1437,8 @@ onUnmounted(() => {
 .msg-input:disabled { opacity: 0.5; pointer-events: none; }
 
 .send-btn {
-  width: 42px;
-  height: 42px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: none;
   background: var(--bg-elevated);
@@ -1477,7 +1449,7 @@ onUnmounted(() => {
   cursor: not-allowed;
   transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
-  font-size: 17px;
+  font-size: 13px;
 }
 
 .send-btn.active {
@@ -1540,13 +1512,6 @@ onUnmounted(() => {
   bottom: 80px; /* leave space for instruction bar */
   cursor: crosshair;
   z-index: 5;
-}
-
-/* Edit button active state */
-.tool-btn.active {
-  background: #1890ff;
-  color: #fff;
-  border-color: #1890ff;
 }
 
 /* Edit target tag inside input field */

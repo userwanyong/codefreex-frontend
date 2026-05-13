@@ -76,6 +76,8 @@ declare namespace API {
     likeCount?: number
     tags?: string[]
     userId?: string
+    userName?: string
+    userAvatar?: string
     editTime?: string
     createTime?: string
   }
