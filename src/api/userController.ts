@@ -70,3 +70,22 @@ export async function getMyCreditTransactions(pageNum = 1, pageSize = 10) {
     params: { pageNum, pageSize },
   })
 }
+
+/** 上传头像 */
+export async function uploadAvatar(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request<API.BaseResponse<string>>('/user/avatar/upload', {
+    method: 'POST',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+/** 更新个人资料 */
+export async function updateProfile(data: { nickname?: string }) {
+  return request<API.BaseResponse<boolean>>('/user/profile/update', {
+    method: 'POST',
+    params: data,
+  })
+}

@@ -74,6 +74,7 @@ declare namespace API {
     priority?: number
     viewCount?: number
     likeCount?: number
+    isLiked?: boolean
     tags?: string[]
     userId?: string
     userName?: string

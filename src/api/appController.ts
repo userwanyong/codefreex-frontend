@@ -105,3 +105,17 @@ export async function getAppCode(appId: string) {
     method: 'GET',
   })
 }
+
+/** 切换点赞 */
+export async function likeApp(appId: string) {
+  return request<API.BaseResponse<boolean>>(`/app/${appId}/like`, {
+    method: 'POST',
+  })
+}
+
+/** 查询点赞状态 */
+export async function getLikeStatus(appId: string) {
+  return request<API.BaseResponse<boolean>>(`/app/${appId}/like/status`, {
+    method: 'GET',
+  })
+}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined, CopyOutlined } from '@ant-design/icons-vue'
 import { generateRedeem, getRedeemList, getRedeemUsers } from '@/api/redeemController'
 import { parseResponseData } from '@/utils/response'
 
@@ -101,6 +101,12 @@ function handleSearch() {
 }
 
 onMounted(() => loadRedeems())
+
+function copyCode(code: string) {
+  navigator.clipboard.writeText(code).then(() => {
+    message.success('已复制到剪贴板')
+  })
+}
 </script>
 
 <template>
@@ -129,7 +135,14 @@ onMounted(() => loadRedeems())
     </div>
 
     <a-table :data-source="redeems" :loading="loading" :pagination="false" row-key="id">
-      <a-table-column title="兑换码" data-index="redeemCode" width="160" />
+      <a-table-column title="兑换码" data-index="redeemCode" width="200">
+        <template #default="{ record }">
+          <a-space>
+            <span class="code-text">{{ record.redeemCode }}</span>
+            <CopyOutlined class="copy-icon" @click="copyCode(record.redeemCode)" />
+          </a-space>
+        </template>
+      </a-table-column>
       <a-table-column title="码点数" data-index="quota" width="100" />
       <a-table-column title="状态" data-index="status" width="100">
         <template #default="{ record }">
@@ -189,7 +202,10 @@ onMounted(() => loadRedeems())
     <a-modal v-model:open="detailVisible" title="兑换码使用详情" :footer="null" width="760">
       <a-descriptions v-if="selectedRedeem" bordered :column="2" size="small" style="margin-bottom: 16px">
         <a-descriptions-item label="兑换码">
-          {{ selectedRedeem.redeemCode || '-' }}
+          <a-space>
+            <span class="code-text">{{ selectedRedeem.redeemCode || '-' }}</span>
+            <CopyOutlined v-if="selectedRedeem.redeemCode" class="copy-icon" @click="copyCode(selectedRedeem.redeemCode!)" />
+          </a-space>
         </a-descriptions-item>
         <a-descriptions-item label="码点数">
           {{ selectedRedeem.quota ?? '-' }}
@@ -258,5 +274,18 @@ onMounted(() => loadRedeems())
   display: flex;
   justify-content: flex-end;
   margin-top: 24px;
+}
+
+.code-text {
+  user-select: none;
+}
+
+.copy-icon {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.copy-icon:hover {
+  color: var(--accent-hover);
 }
 </style>

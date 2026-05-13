@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
+import { CopyOutlined } from '@ant-design/icons-vue'
 import { getAdminInvites } from '@/api/inviteController'
 import { parseResponseData } from '@/utils/response'
 
@@ -49,6 +51,12 @@ function handleSearch() {
 }
 
 onMounted(() => loadInvites())
+
+function copyCode(code: string) {
+  navigator.clipboard.writeText(code).then(() => {
+    message.success('已复制到剪贴板')
+  })
+}
 </script>
 
 <template>
@@ -74,7 +82,14 @@ onMounted(() => loadInvites())
     </div>
 
     <a-table :data-source="invites" :loading="loading" :pagination="false" row-key="id">
-      <a-table-column title="邀请码" data-index="inviteCode" width="160" />
+      <a-table-column title="邀请码" data-index="inviteCode" width="200">
+        <template #default="{ record }">
+          <a-space>
+            <span class="code-text">{{ record.inviteCode }}</span>
+            <CopyOutlined class="copy-icon" @click="copyCode(record.inviteCode)" />
+          </a-space>
+        </template>
+      </a-table-column>
       <a-table-column title="状态" data-index="status" width="100">
         <template #default="{ record }">
           <a-tag :color="statusMap[record.status]?.color || 'default'">
@@ -142,5 +157,18 @@ onMounted(() => loadInvites())
   display: flex;
   justify-content: flex-end;
   margin-top: 24px;
+}
+
+.code-text {
+  user-select: none;
+}
+
+.copy-icon {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.copy-icon:hover {
+  color: var(--accent-hover);
 }
 </style>

@@ -8,6 +8,7 @@ import {
   ArrowLeftOutlined,
   EyeOutlined,
   LikeOutlined,
+  LikeFilled,
   ClockCircleOutlined,
   CodeOutlined,
   TagOutlined,
@@ -22,7 +23,7 @@ import {
   LinkOutlined,
   StopOutlined,
 } from '@ant-design/icons-vue'
-import { getApp, editApp, deleteApp, deployApp, cancelDeploy, downloadApp } from '@/api/appController'
+import { getApp, editApp, deleteApp, deployApp, cancelDeploy, downloadApp, likeApp } from '@/api/appController'
 import { getAllTags } from '@/api/tagController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
@@ -52,6 +53,33 @@ const appId = computed(() => {
 })
 
 const isOwner = computed(() => String(app.value?.userId) === String(userStore.loginUser?.userId))
+
+const isLiked = ref(false)
+const likeLoading = ref(false)
+
+async function handleLike() {
+  if (!app.value?.id || likeLoading.value) return
+  if (!userStore.isLoggedIn) {
+    message.warning('请先登录')
+    return
+  }
+  likeLoading.value = true
+  try {
+    const res = await likeApp(app.value.id)
+    if (res.data?.code === 0 && res.data.data !== undefined) {
+      const liked = res.data.data
+      isLiked.value = liked
+      app.value = {
+        ...app.value!,
+        likeCount: (app.value?.likeCount ?? 0) + (liked ? 1 : -1),
+      }
+    }
+  } catch {
+    // ignore
+  } finally {
+    likeLoading.value = false
+  }
+}
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   draft: { label: '草稿', color: '#64748B', bg: 'rgba(100, 116, 139, 0.15)' },
@@ -93,6 +121,7 @@ async function loadApp() {
     const res = await getApp(appId.value)
     if (res.data?.code === 0 && res.data.data) {
       app.value = parseResponseData<API.AppVO>(res.data.data)
+      isLiked.value = app.value?.isLiked ?? false
     }
   } catch {
     // ignore
@@ -294,8 +323,14 @@ onMounted(() => loadApp())
                 <span class="stat-badge">
                   <EyeOutlined /> {{ app.viewCount ?? 0 }}
                 </span>
-                <span class="stat-badge">
-                  <LikeOutlined /> {{ app.likeCount ?? 0 }}
+                <span
+                  class="stat-badge like-btn"
+                  :class="{ 'liked': isLiked }"
+                  @click.stop="handleLike"
+                >
+                  <LikeFilled v-if="isLiked" />
+                  <LikeOutlined v-else />
+                  {{ app.likeCount ?? 0 }}
                 </span>
               </div>
               <p class="app-desc">{{ app.description || '暂无描述' }}</p>
@@ -579,6 +614,19 @@ onMounted(() => loadApp())
   gap: 4px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.like-btn {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.like-btn:hover {
+  color: #EF4444;
+}
+
+.like-btn.liked {
+  color: #EF4444;
 }
 
 .app-desc {

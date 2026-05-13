@@ -15,8 +15,7 @@ const total = ref(0)
 const generateModalVisible = ref(false)
 const generateLoading = ref(false)
 const generateForm = ref({
-  batch: '',
-  expireHours: 168,
+  expireDays: 7,
   maxUseCount: 1,
 })
 
@@ -48,8 +47,7 @@ async function handleGenerate() {
   generateLoading.value = true
   try {
     const res = await generateInvite({
-      batch: generateForm.value.batch || undefined,
-      expireHours: generateForm.value.expireHours,
+      expireHours: generateForm.value.expireDays * 24,
       maxUseCount: generateForm.value.maxUseCount,
     })
     if (res.data?.code === 0) {
@@ -144,14 +142,13 @@ onMounted(() => {
       ok-text="生成"
     >
       <a-form layout="vertical">
-        <a-form-item label="批次标识">
-          <a-input v-model:value="generateForm.batch" placeholder="可选，便于归类" />
-        </a-form-item>
-        <a-form-item label="有效期（小时）">
-          <a-input-number v-model:value="generateForm.expireHours" :min="1" style="width: 100%" />
+        <a-form-item label="有效期（天）">
+          <a-input-number v-model:value="generateForm.expireDays" :min="1" :max="7" style="width: 100%" />
+          <div class="form-hint">有效期最长7天</div>
         </a-form-item>
         <a-form-item label="最大使用次数">
-          <a-input-number v-model:value="generateForm.maxUseCount" :min="1" style="width: 100%" />
+          <a-input-number v-model:value="generateForm.maxUseCount" :min="1" :max="3" style="width: 100%" />
+          <div class="form-hint">邀请码最多使用3次</div>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -190,5 +187,11 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 24px;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
 }
 </style>
