@@ -15,6 +15,7 @@ import {
   CloseOutlined,
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
+import { useUserStore } from '@/stores/userStore'
 import { getApp, deployApp, cancelDeploy, downloadApp, getAppCode } from '@/api/appController'
 import { streamWorkflowGenerate, getChatHistory } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
@@ -345,6 +346,16 @@ function scrollToBottom() {
 async function sendToAI(text: string) {
   if (currentAbortController) { currentAbortController.abort(); currentAbortController = null }
 
+  // 余额检查（首次生成已在创建应用时扣减50码点，这里只检查后续对话的10码点）
+  const userStore = useUserStore()
+  await userStore.fetchUserInfo()
+  const remaining = userStore.userInfo?.remainingCredits ?? 0
+  const isFirst = messages.value.length === 0
+  if (!isFirst && remaining < 10) {
+    message.error('码点不足，对话需要 10 码点，请先兑换码点')
+    return
+  }
+
   sending.value = true
   currentNode.value = null
   retryCount.value = 0
@@ -614,6 +625,8 @@ async function sendToAI(text: string) {
       loadAppCode()
       refreshAppInfo()
       scrollToBottom()
+      // 刷新用户余额（码点已扣减）
+      useUserStore().fetchUserInfo()
     },
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onError(_err) {
@@ -655,9 +668,11 @@ async function handleSend() {
 
   if (editSelector.value) {
     const selector = editSelector.value
-    const fullText = `[可视化编辑] 目标元素选择器: ${selector}\n${text}`
+    const ctx = editContext.value
+    const fullText = `[可视化编辑]\n${ctx}\n\n用户指令: ${text}`
     addMessage('user', `[编辑] 目标元素: ${selector}\n${text}`, 'done')
     editSelector.value = ''
+    editContext.value = ''
     await sendToAI(fullText)
   } else {
     addMessage('user', text, 'done')
@@ -689,6 +704,74 @@ function refreshPreview() { previewKey.value += 1 }
 // Visual edit mode
 const editMode = ref(false)
 const editSelector = ref('')
+const editContext = ref('')
+
+function collectElementContext(el: HTMLElement, iframe: HTMLIFrameElement): string {
+  const doc = iframe.contentDocument!
+  const win = iframe.contentWindow!
+  const selector = buildSelector(el, doc.body)
+  const lines: string[] = []
+
+  // 1. 选择器
+  lines.push(`目标选择器: ${selector}`)
+
+  // 2. 元素标签与属性
+  const tag = el.tagName.toLowerCase()
+  const attrs: string[] = []
+  for (const attr of Array.from(el.attributes)) {
+    if (attr.name !== 'class' && attr.name !== 'style' && attr.name !== 'id') {
+      attrs.push(`${attr.name}="${attr.value}"`)
+    }
+  }
+  const classStr = el.className && typeof el.className === 'string' ? ` class="${el.className}"` : ''
+  const idStr = el.id ? ` id="${el.id}"` : ''
+  const attrStr = attrs.length ? ' ' + attrs.join(' ') : ''
+  lines.push(`元素: <${tag}${idStr}${classStr}${attrStr}>`)
+
+  // 3. 元素 HTML 片段（截取前 500 字符）
+  const outerHtml = el.outerHTML
+  const htmlSnippet = outerHtml.length > 500 ? outerHtml.slice(0, 500) + '...' : outerHtml
+  lines.push(`HTML: ${htmlSnippet}`)
+
+  // 4. 文本内容摘要
+  const text = (el.textContent || '').trim().slice(0, 200)
+  if (text) lines.push(`文本内容: ${text}`)
+
+  // 5. 关键计算样式
+  const cs = win.getComputedStyle(el)
+  const pick = (prop: string) => cs.getPropertyValue(prop)
+  const styles = [
+    `display: ${pick('display')}`,
+    `position: ${pick('position')}`,
+    `color: ${pick('color')}`,
+    `background: ${pick('background-color')}`,
+    `font-size: ${pick('font-size')}`,
+    `font-weight: ${pick('font-weight')}`,
+    `width: ${pick('width')}`,
+    `height: ${pick('height')}`,
+    `margin: ${pick('margin')}`,
+    `padding: ${pick('padding')}`,
+    `border: ${pick('border')}`,
+  ]
+  lines.push(`计算样式: { ${styles.join(', ')} }`)
+
+  // 6. 尺寸与位置
+  const rect = el.getBoundingClientRect()
+  lines.push(`位置尺寸: { top: ${Math.round(rect.top)}, left: ${Math.round(rect.left)}, width: ${Math.round(rect.width)}, height: ${Math.round(rect.height)} }`)
+
+  // 7. 父级上下文
+  const parent = el.parentElement
+  if (parent && parent !== doc.body) {
+    const pTag = parent.tagName.toLowerCase()
+    const pClass = parent.className && typeof parent.className === 'string' ? ` class="${parent.className}"` : ''
+    lines.push(`父元素: <${pTag}${parent.id ? ` id="${parent.id}"` : ''}${pClass}>`)
+  }
+
+  // 8. 页面视口信息
+  lines.push(`页面视口: ${doc.documentElement.scrollWidth}x${doc.documentElement.scrollHeight} (可见区: ${win.innerWidth}x${win.innerHeight})`)
+
+  return lines.join('\n')
+}
 
 function toggleEditMode() {
   if (!deployKey.value) {
@@ -703,6 +786,7 @@ function toggleEditMode() {
     clearHighlight()
   }
   editSelector.value = ''
+  editContext.value = ''
 }
 
 function handleIframeClick(e: MessageEvent) {
@@ -802,6 +886,7 @@ function handleEditOverlayClick(e: MouseEvent) {
   const { el, iframe } = result
 
   editSelector.value = buildSelector(el, iframe.contentDocument!.body)
+  editContext.value = collectElementContext(el, iframe)
 
   // 退出编辑模式，清除高亮
   editMode.value = false

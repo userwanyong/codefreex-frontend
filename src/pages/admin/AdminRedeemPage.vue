@@ -48,7 +48,7 @@ async function loadRedeems() {
 
 async function handleGenerate() {
   if (generateForm.value.quota <= 0) {
-    message.warning('额度必须大于0')
+    message.warning('码点数必须大于0')
     return
   }
   generateLoading.value = true
@@ -130,7 +130,7 @@ onMounted(() => loadRedeems())
 
     <a-table :data-source="redeems" :loading="loading" :pagination="false" row-key="id">
       <a-table-column title="兑换码" data-index="redeemCode" width="160" />
-      <a-table-column title="额度" data-index="quota" width="100" />
+      <a-table-column title="码点数" data-index="quota" width="100" />
       <a-table-column title="状态" data-index="status" width="100">
         <template #default="{ record }">
           <a-tag :color="statusMap[record.status]?.color || 'default'">
@@ -171,7 +171,7 @@ onMounted(() => loadRedeems())
       ok-text="生成"
     >
       <a-form layout="vertical">
-        <a-form-item label="额度" required>
+        <a-form-item label="码点数" required>
           <a-input-number v-model:value="generateForm.quota" :min="1" style="width: 100%" />
         </a-form-item>
         <a-form-item label="批次标识">
@@ -191,7 +191,7 @@ onMounted(() => loadRedeems())
         <a-descriptions-item label="兑换码">
           {{ selectedRedeem.redeemCode || '-' }}
         </a-descriptions-item>
-        <a-descriptions-item label="额度">
+        <a-descriptions-item label="码点数">
           {{ selectedRedeem.quota ?? '-' }}
         </a-descriptions-item>
         <a-descriptions-item label="状态">

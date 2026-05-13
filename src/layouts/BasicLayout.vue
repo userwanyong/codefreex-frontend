@@ -110,6 +110,10 @@ function navigate(path: string) {
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           </button>
           <template v-if="userStore.isLoggedIn">
+            <div class="credits-badge" @click="router.push('/profile')" title="剩余码点">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span class="credits-num">{{ userStore.userInfo?.remainingCredits ?? 0 }}</span>
+            </div>
             <a-button type="primary" class="create-btn" @click="router.push('/')">
               + 新建应用
             </a-button>
@@ -299,8 +303,50 @@ function navigate(path: string) {
   gap: var(--space-3);
 }
 
+/* Credits Badge */
+.credits-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--accent-soft), rgba(99, 102, 241, 0.08));
+  border: 1px solid var(--border-accent);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  user-select: none;
+}
+
+.credits-badge:hover {
+  background: linear-gradient(135deg, var(--accent-soft), rgba(99, 102, 241, 0.15));
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.credits-badge svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.credits-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #52c41a;
+  box-shadow: 0 0 6px rgba(82, 196, 26, 0.5);
+  flex-shrink: 0;
+}
+
+.credits-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
 .create-btn {
-  height: 36px;
   border-radius: var(--radius-md);
   font-weight: 600;
   padding: 0 16px;
@@ -443,7 +489,8 @@ function navigate(path: string) {
     display: none;
   }
 
-  .create-btn {
+  .create-btn,
+  .credits-badge {
     display: none;
   }
 

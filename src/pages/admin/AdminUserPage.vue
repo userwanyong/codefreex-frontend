@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { UserOutlined, StopOutlined, CheckCircleOutlined, EyeOutlined } from '@ant-design/icons-vue'
-import { adminListUsers, adminGetUserDetail, adminSetUserStatus } from '@/api/userController'
+import { UserOutlined, StopOutlined, CheckCircleOutlined, EyeOutlined, DollarOutlined } from '@ant-design/icons-vue'
+import { adminListUsers, adminGetUserDetail, adminSetUserStatus, adminAdjustCredits, adminGetCreditTransactions } from '@/api/userController'
 import { parseResponseData } from '@/utils/response'
 
 const users = ref<API.UserInfo[]>([])
@@ -51,6 +51,7 @@ async function viewDetail(userId: string) {
     if (res.data?.code === 0 && res.data.data) {
       detailUser.value = parseResponseData<API.AdminUserVO>(res.data.data)
     }
+    loadCreditTransactions(userId)
   } catch {
     message.error('获取用户详情失败')
   } finally {
@@ -91,6 +92,70 @@ function handlePageChange(page: number) {
 function handleSearch() {
   pageNum.value = 1
   loadUsers()
+}
+
+// === 码点流水 ===
+const creditTransactions = ref<API.CreditTransaction[]>([])
+const creditLoading = ref(false)
+const transactionTypeMap: Record<string, string> = {
+  recharge: '充值',
+  consume: '消费',
+  admin_adjust: '管理员调整',
+  gift: '赠送',
+}
+
+async function loadCreditTransactions(userId: string) {
+  creditLoading.value = true
+  try {
+    const res = await adminGetCreditTransactions(userId, 1, 10)
+    if (res.data?.code === 0 && res.data.data) {
+      const data = parseResponseData<API.PageResponse<API.CreditTransaction>>(res.data.data)
+      creditTransactions.value = data.records || []
+    }
+  } catch {
+    // ignore
+  } finally {
+    creditLoading.value = false
+  }
+}
+
+// === 调整码点 ===
+const adjustVisible = ref(false)
+const adjustLoading = ref(false)
+const adjustAmount = ref(0)
+const adjustDescription = ref('')
+
+function openAdjustModal() {
+  adjustAmount.value = 0
+  adjustDescription.value = ''
+  adjustVisible.value = true
+}
+
+async function handleAdjustCredits() {
+  if (!detailUser.value?.userId || adjustAmount.value === 0) {
+    message.warning('请输入调整数量')
+    return
+  }
+  adjustLoading.value = true
+  try {
+    const res = await adminAdjustCredits({
+      userId: detailUser.value.userId,
+      amount: adjustAmount.value,
+      description: adjustDescription.value || undefined,
+    })
+    if (res.data?.code === 0) {
+      message.success('调整成功')
+      adjustVisible.value = false
+      viewDetail(detailUser.value.userId)
+      loadUsers()
+    } else {
+      message.error(res.data?.message || '调整失败')
+    }
+  } catch {
+    message.error('调整失败')
+  } finally {
+    adjustLoading.value = false
+  }
 }
 
 function formatDate(dateStr?: string) {
@@ -151,8 +216,8 @@ onMounted(() => loadUsers())
           </a-tag>
         </template>
       </a-table-column>
-      <a-table-column title="剩余额度" data-index="remainingCredits" width="100" />
-      <a-table-column title="累计额度" data-index="totalCredits" width="100" />
+      <a-table-column title="剩余码点" data-index="remainingCredits" width="100" />
+      <a-table-column title="累计码点" data-index="totalCredits" width="100" />
       <a-table-column title="注册时间" data-index="createTime" width="180">
         <template #default="{ record }">
           {{ formatDate(record.createTime) }}
@@ -204,7 +269,7 @@ onMounted(() => loadUsers())
       v-model:open="detailVisible"
       title="用户详情"
       :footer="null"
-      width="520px"
+      width="640px"
     >
       <a-spin :spinning="detailLoading">
         <div v-if="detailUser" class="detail-content">
@@ -228,12 +293,73 @@ onMounted(() => loadUsers())
               <a-tag v-for="role in detailUser.roles" :key="role">{{ role }}</a-tag>
               <span v-if="!detailUser.roles?.length">-</span>
             </a-descriptions-item>
-            <a-descriptions-item label="累计额度">{{ detailUser.totalCredits ?? 0 }}</a-descriptions-item>
-            <a-descriptions-item label="剩余额度">{{ detailUser.remainingCredits ?? 0 }}</a-descriptions-item>
+            <a-descriptions-item label="累计码点">
+              {{ detailUser.totalCredits ?? 0 }}
+              <a-button type="link" size="small" @click="openAdjustModal">
+                <template #icon><DollarOutlined /></template>
+                调整
+              </a-button>
+            </a-descriptions-item>
+            <a-descriptions-item label="剩余码点">{{ detailUser.remainingCredits ?? 0 }}</a-descriptions-item>
             <a-descriptions-item label="注册时间">{{ formatDate(detailUser.createTime) }}</a-descriptions-item>
           </a-descriptions>
+
+          <a-divider>码点流水</a-divider>
+          <a-table
+            :data-source="creditTransactions"
+            :loading="creditLoading"
+            :pagination="false"
+            size="small"
+            row-key="id"
+          >
+            <a-table-column title="类型" data-index="type" width="90">
+              <template #default="{ record }">
+                <a-tag :color="record.type === 'consume' ? 'red' : record.type === 'recharge' ? 'green' : 'blue'">
+                  {{ transactionTypeMap[record.type] || record.type }}
+                </a-tag>
+              </template>
+            </a-table-column>
+            <a-table-column title="变动" data-index="amount" width="80">
+              <template #default="{ record }">
+                <span :style="{ color: record.amount > 0 ? '#52c41a' : '#ff4d4f' }">
+                  {{ record.amount > 0 ? '+' : '' }}{{ record.amount }}
+                </span>
+              </template>
+            </a-table-column>
+            <a-table-column title="余额" data-index="balanceAfter" width="80" />
+            <a-table-column title="描述" data-index="description" ellipsis />
+            <a-table-column title="时间" data-index="createTime" width="150">
+              <template #default="{ record }">{{ formatDate(record.createTime) }}</template>
+            </a-table-column>
+          </a-table>
         </div>
       </a-spin>
+    </a-modal>
+
+    <!-- 调整码点弹窗 -->
+    <a-modal
+      v-model:open="adjustVisible"
+      title="调整码点"
+      @ok="handleAdjustCredits"
+      :confirm-loading="adjustLoading"
+    >
+      <a-form :label-col="{ span: 6 }">
+        <a-form-item label="用户">
+          {{ detailUser?.nickname || detailUser?.userId }}
+        </a-form-item>
+        <a-form-item label="当前码点">
+          {{ detailUser?.remainingCredits ?? 0 }}
+        </a-form-item>
+        <a-form-item label="调整数量">
+          <a-input-number v-model:value="adjustAmount" :step="10" style="width: 100%" />
+          <div style="color: var(--text-secondary); font-size: 12px; margin-top: 4px">
+            正数为增加，负数为减少
+          </div>
+        </a-form-item>
+        <a-form-item label="备注">
+          <a-textarea v-model:value="adjustDescription" :rows="2" placeholder="可选" />
+        </a-form-item>
+      </a-form>
     </a-modal>
   </div>
 </template>

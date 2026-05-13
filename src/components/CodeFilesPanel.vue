@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import {
-  FileOutlined,
   FolderOutlined,
   FolderOpenOutlined,
   CodeOutlined,
@@ -194,9 +193,14 @@ function getIconColor(name: string): string {
             @click="item.node.isDir ? toggleDir(item.node.path) : selectFile(item.node.path)"
           >
             <component
-              :is="item.node.isDir ? (isExpanded(item.node.path) ? FolderOpenOutlined : FolderOutlined) : FileOutlined"
+              :is="item.node.isDir ? (isExpanded(item.node.path) ? FolderOpenOutlined : FolderOutlined) : undefined"
               class="node-icon"
               :style="item.node.isDir ? {} : { color: getIconColor(item.node.name) }"
+            />
+            <span
+              v-if="!item.node.isDir"
+              class="file-dot"
+              :style="{ background: getIconColor(item.node.name) }"
             />
             <span class="node-name">{{ item.node.name }}</span>
             <LoadingOutlined v-if="item.node.file?.streaming" class="streaming-indicator" />
@@ -214,7 +218,7 @@ function getIconColor(name: string): string {
       <div v-if="currentFile" class="code-viewer-inner">
         <div class="code-viewer-header">
           <div class="header-left">
-            <FileOutlined :style="{ color: getIconColor(currentFile.name) }" />
+            <span class="file-dot" :style="{ background: getIconColor(currentFile.name) }" />
             <span class="file-path">{{ currentFile.path }}</span>
             <span class="file-lang">{{ currentFile.language }}</span>
             <LoadingOutlined v-if="currentFile.streaming" class="header-streaming" />
@@ -317,6 +321,14 @@ function getIconColor(name: string): string {
 .node-icon {
   font-size: 13px;
   flex-shrink: 0;
+}
+
+.file-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin: 0 2px;
 }
 
 .node-name {

@@ -231,6 +231,41 @@ declare namespace API {
     isDelete?: number
   }
 
+  // === Credit Transaction ===
+  type CreditTransaction = {
+    id?: string
+    userId?: string
+    type?: string
+    amount?: number
+    balanceAfter?: number
+    sourceType?: string
+    sourceId?: string
+    description?: string
+    operatorId?: string
+    createTime?: string
+  }
+
+  type CreditAdjustRequest = {
+    userId: string
+    amount: number
+    description?: string
+  }
+
+  // === User Usage ===
+  type UserUsage = {
+    id?: string
+    userId?: string
+    appId?: string
+    modelId?: string
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+    latency?: number
+    status?: string
+    errorInfo?: string
+    createTime?: string
+  }
+
   // === Enums ===
   type AppStatus = 'draft' | 'generating' | 'generated' | 'deployed' | 'disabled'
   type CodeGenType = 'html' | 'multi_file' | 'vue_project'

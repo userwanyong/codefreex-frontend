@@ -33,7 +33,7 @@ async function handleRedeem() {
   <div class="redeem-page">
     <div class="page-header">
       <h2>兑换码</h2>
-      <p>输入兑换码即可获得相应额度</p>
+      <p>输入兑换码即可获得相应码点</p>
     </div>
 
     <a-card class="redeem-card">

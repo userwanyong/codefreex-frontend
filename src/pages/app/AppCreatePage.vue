@@ -6,8 +6,10 @@ import { RocketOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { createApp } from '@/api/appController'
 import { getAllTags } from '@/api/tagController'
 import { parseResponseData } from '@/utils/response'
+import { useUserStore } from '@/stores/userStore'
 
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const tagOptions = ref<API.TagVO[]>([])
 
@@ -23,6 +25,15 @@ async function handleCreate() {
     message.warning('请输入生成提示词')
     return
   }
+
+  // 创建前检查码点余额
+  await userStore.fetchUserInfo()
+  const remaining = userStore.userInfo?.remainingCredits ?? 0
+  if (remaining < 50) {
+    message.error('码点不足，创建应用需要 50 码点，请先兑换码点')
+    return
+  }
+
   loading.value = true
   try {
     // 创建应用（安全审查已集成到工作流节点中）

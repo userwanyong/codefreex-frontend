@@ -38,3 +38,35 @@ export async function adminSetUserStatus(userId: string, status: string) {
     params: { userId, status },
   })
 }
+
+/** 管理员查询用户码点流水 */
+export async function adminGetCreditTransactions(userId: string, pageNum = 1, pageSize = 10) {
+  return request<API.BaseResponse<API.PageResponse<API.CreditTransaction>>>(`/user/admin/${userId}/credit-transactions`, {
+    method: 'GET',
+    params: { pageNum, pageSize },
+  })
+}
+
+/** 管理员分页查询所有码点流水 */
+export async function adminListAllCreditTransactions(params: { pageNum?: number; pageSize?: number; userId?: string; type?: string }) {
+  return request<API.BaseResponse<API.PageResponse<API.CreditTransaction>>>('/user/admin/credit-transactions', {
+    method: 'GET',
+    params,
+  })
+}
+
+/** 管理员调整用户码点 */
+export async function adminAdjustCredits(data: API.CreditAdjustRequest) {
+  return request<API.BaseResponse<boolean>>('/user/admin/adjust-credits', {
+    method: 'POST',
+    data,
+  })
+}
+
+/** 查询我的码点流水 */
+export async function getMyCreditTransactions(pageNum = 1, pageSize = 10) {
+  return request<API.BaseResponse<API.PageResponse<API.CreditTransaction>>>('/user/credit-transactions', {
+    method: 'GET',
+    params: { pageNum, pageSize },
+  })
+}

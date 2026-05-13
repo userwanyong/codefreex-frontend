@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/stores/userStore'
-import { getUserInfo } from '@/api/userController'
+import { getUserInfo, getMyCreditTransactions } from '@/api/userController'
 import { getMyInviter } from '@/api/inviteController'
+import { parseResponseData } from '@/utils/response'
 
 const userStore = useUserStore()
 const userInfo = ref<API.UserInfo | null>(null)
 const inviter = ref<API.UserInfo | null>(null)
 const loading = ref(true)
+
+const creditTransactions = ref<API.CreditTransaction[]>([])
+const creditLoading = ref(false)
+const transactionTypeMap: Record<string, string> = {
+  recharge: '充值',
+  consume: '消费',
+  admin_adjust: '管理员调整',
+  gift: '赠送',
+}
 
 async function loadData() {
   loading.value = true
@@ -26,7 +36,30 @@ async function loadData() {
   }
 }
 
-onMounted(() => loadData())
+async function loadCreditTransactions() {
+  creditLoading.value = true
+  try {
+    const res = await getMyCreditTransactions(1, 20)
+    if (res.data?.code === 0 && res.data.data) {
+      const data = parseResponseData<API.PageResponse<API.CreditTransaction>>(res.data.data)
+      creditTransactions.value = data.records || []
+    }
+  } catch {
+    // ignore
+  } finally {
+    creditLoading.value = false
+  }
+}
+
+function formatDate(dateStr?: string) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+onMounted(() => {
+  loadData()
+  loadCreditTransactions()
+})
 </script>
 
 <template>
@@ -46,8 +79,11 @@ onMounted(() => loadData())
               <a-descriptions-item label="邮箱">
                 {{ userStore.loginUser?.email || '-' }}
               </a-descriptions-item>
-              <a-descriptions-item label="积分">
+              <a-descriptions-item label="码点">
                 <span class="credits-value">{{ userInfo?.remainingCredits ?? '-' }}</span>
+                <span style="color: var(--text-secondary); font-size: 12px; margin-left: 8px">
+                  / 累计 {{ userInfo?.totalCredits ?? 0 }}
+                </span>
               </a-descriptions-item>
               <a-descriptions-item label="角色">
                 <a-space v-if="userStore.roles.length">
@@ -69,6 +105,36 @@ onMounted(() => loadData())
           </a-card>
         </a-col>
       </a-row>
+
+      <a-card title="码点流水" class="profile-card" style="margin-top: 24px">
+        <a-table
+          :data-source="creditTransactions"
+          :loading="creditLoading"
+          :pagination="false"
+          size="small"
+          row-key="id"
+        >
+          <a-table-column title="类型" data-index="type" width="100">
+            <template #default="{ record }">
+              <a-tag :color="record.type === 'consume' ? 'red' : record.type === 'recharge' ? 'green' : 'blue'">
+                {{ transactionTypeMap[record.type] || record.type }}
+              </a-tag>
+            </template>
+          </a-table-column>
+          <a-table-column title="变动" data-index="amount" width="80">
+            <template #default="{ record }">
+              <span :style="{ color: record.amount > 0 ? '#52c41a' : '#ff4d4f' }">
+                {{ record.amount > 0 ? '+' : '' }}{{ record.amount }}
+              </span>
+            </template>
+          </a-table-column>
+          <a-table-column title="余额" data-index="balanceAfter" width="80" />
+          <a-table-column title="描述" data-index="description" ellipsis />
+          <a-table-column title="时间" width="160">
+            <template #default="{ record }">{{ formatDate(record.createTime) }}</template>
+          </a-table-column>
+        </a-table>
+      </a-card>
     </a-spin>
   </div>
 </template>
