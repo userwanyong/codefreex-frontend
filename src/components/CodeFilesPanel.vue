@@ -143,6 +143,21 @@ function escapeHtml(str: string) {
 const fileCount = computed(() => files.value.length)
 const totalLines = computed(() => files.value.reduce((sum, f) => sum + f.content.split('\n').length, 0))
 
+// 将树结构展平为一维列表，支持任意嵌套深度
+const flatTree = computed(() => {
+  const result: { node: TreeNode; depth: number }[] = []
+  function walk(nodes: TreeNode[], depth: number) {
+    for (const node of nodes) {
+      result.push({ node, depth })
+      if (node.isDir && isExpanded(node.path) && node.children) {
+        walk(node.children, depth + 1)
+      }
+    }
+  }
+  walk(fileTree.value, 0)
+  return result
+})
+
 function getIconColor(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase() || ''
   const colorMap: Record<string, string> = {
@@ -164,52 +179,27 @@ function getIconColor(name: string): string {
         <span class="file-count">{{ fileCount }} 文件</span>
       </div>
       <div class="file-tree-content">
-        <template v-if="fileTree.length">
+        <template v-if="flatTree.length">
           <div
-            v-for="node in fileTree"
-            :key="node.path"
-            class="tree-node-wrapper"
+            v-for="item in flatTree"
+            :key="item.node.path"
+            class="tree-node"
+            :class="{
+              'is-dir': item.node.isDir,
+              'is-file': !item.node.isDir,
+              'is-selected': !item.node.isDir && item.node.path === selectedPath,
+              'is-streaming': item.node.file?.streaming,
+            }"
+            :style="{ paddingLeft: `${12 + item.depth * 16}px` }"
+            @click="item.node.isDir ? toggleDir(item.node.path) : selectFile(item.node.path)"
           >
-            <div
-              class="tree-node"
-              :class="{
-                'is-dir': node.isDir,
-                'is-file': !node.isDir,
-                'is-selected': !node.isDir && node.path === selectedPath,
-                'is-streaming': node.file?.streaming,
-              }"
-              @click="node.isDir ? toggleDir(node.path) : selectFile(node.path)"
-            >
-              <component
-                :is="node.isDir ? (isExpanded(node.path) ? FolderOpenOutlined : FolderOutlined) : FileOutlined"
-                class="node-icon"
-                :style="node.isDir ? {} : { color: getIconColor(node.name) }"
-              />
-              <span class="node-name">{{ node.name }}</span>
-              <LoadingOutlined v-if="node.file?.streaming" class="streaming-indicator" />
-            </div>
-            <div v-if="node.isDir && isExpanded(node.path) && node.children" class="tree-children">
-              <div
-                v-for="child in node.children"
-                :key="child.path"
-                class="tree-node"
-                :class="{
-                  'is-file': !child.isDir,
-                  'is-dir': child.isDir,
-                  'is-selected': !child.isDir && child.path === selectedPath,
-                  'is-streaming': child.file?.streaming,
-                }"
-                @click="child.isDir ? toggleDir(child.path) : selectFile(child.path)"
-              >
-                <component
-                  :is="child.isDir ? (isExpanded(child.path) ? FolderOpenOutlined : FolderOutlined) : FileOutlined"
-                  class="node-icon"
-                  :style="child.isDir ? {} : { color: getIconColor(child.name) }"
-                />
-                <span class="node-name">{{ child.name }}</span>
-                <LoadingOutlined v-if="child.file?.streaming" class="streaming-indicator" />
-              </div>
-            </div>
+            <component
+              :is="item.node.isDir ? (isExpanded(item.node.path) ? FolderOpenOutlined : FolderOutlined) : FileOutlined"
+              class="node-icon"
+              :style="item.node.isDir ? {} : { color: getIconColor(item.node.name) }"
+            />
+            <span class="node-name">{{ item.node.name }}</span>
+            <LoadingOutlined v-if="item.node.file?.streaming" class="streaming-indicator" />
           </div>
         </template>
         <div v-else class="tree-empty">
@@ -301,15 +291,12 @@ function getIconColor(name: string): string {
 .file-tree-content::-webkit-scrollbar-track { background: transparent; }
 .file-tree-content::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 2px; }
 
-.tree-node-wrapper {
-  width: 100%;
-}
-
 .tree-node {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
+  padding-right: 12px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
@@ -325,18 +312,6 @@ function getIconColor(name: string): string {
 .tree-node.is-selected {
   background: rgba(34, 197, 94, 0.08);
   color: var(--accent);
-}
-
-.tree-node.is-file {
-  padding-left: 20px;
-}
-
-.tree-children .tree-node.is-file {
-  padding-left: 36px;
-}
-
-.tree-children .tree-node.is-dir {
-  padding-left: 28px;
 }
 
 .node-icon {

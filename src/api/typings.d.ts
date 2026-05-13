@@ -215,7 +215,7 @@ declare namespace API {
   type WorkflowNode =
     | 'promptGuardNode' | 'promptReviewNode' | 'prdGenNode'
     | 'imagePlanNode' | 'imageFetchNode' | 'promptEnhanceNode'
-    | 'routeNode' | 'codeGenNode' | 'qualityCheckNode' | 'persistNode'
+    | 'routeNode' | 'codeGenNode' | 'buildNode' | 'qualityCheckNode' | 'persistNode'
 
   type WorkflowEventType = 'tool_request' | 'tool_executed' | 'ai_response' | 'done' | 'error'
 

@@ -18,12 +18,14 @@ const NODE_PHASE_MAP: Record<string, number> = {
   imageFetchNode: 2,
   promptEnhanceNode: 2,
   codeGenNode: 3,
-  qualityCheckNode: 4,
-  codeFixNode: 4,
-  persistNode: 4,
+  visualEditNode: 3,
+  buildNode: 4,
+  qualityCheckNode: 5,
+  codeFixNode: 5,
+  persistNode: 5,
 }
 
-const PHASE_LABELS = ['安全审查', '需求分析', '素材准备', '代码生成', '质量检查']
+const PHASE_LABELS = ['安全审查', '需求分析', '素材准备', '代码生成', '项目构建', '质量检查']
 
 const NODE_DESCRIPTIONS: Record<string, string> = {
   promptGuardNode: '关键词安全检查中...',
@@ -35,6 +37,8 @@ const NODE_DESCRIPTIONS: Record<string, string> = {
   promptEnhanceNode: '增强提示词...',
   routeNode: '确定生成方案...',
   codeGenNode: 'AI 生成代码中...',
+  visualEditNode: '执行可视化修改...',
+  buildNode: '项目构建打包中...',
   qualityCheckNode: '代码质量检查...',
   codeFixNode: '修复代码...',
   persistNode: '保存文件...',

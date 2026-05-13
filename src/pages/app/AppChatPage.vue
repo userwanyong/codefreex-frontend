@@ -63,7 +63,6 @@ const sending = ref(false)
 const optimizing = ref(false)
 const chatEndRef = ref<HTMLElement | null>(null)
 const messagesAreaRef = ref<HTMLElement | null>(null)
-let currentEventSource: EventSource | null = null
 let currentAbortController: AbortController | null = null
 let msgIdCounter = 0
 let hasAutoSent = false
@@ -89,6 +88,7 @@ const NODE_DESCRIPTIONS: Record<string, string> = {
   promptEnhanceNode: '增强提示词...',
   routeNode: '确定生成方案...',
   codeGenNode: 'AI 生成代码中...',
+  buildNode: '项目构建打包中...',
   qualityCheckNode: '质量验证中...',
   persistNode: '保存文件中...',
   chatDirectNode: 'AI 思考回复中...',
@@ -103,6 +103,7 @@ const NODE_LABELS: Record<string, { icon: string; label: string }> = {
   promptEnhanceNode: { icon: '✨', label: '优化提示词' },
   routeNode: { icon: '🎯', label: '确定生成方案' },
   codeGenNode: { icon: '💻', label: '编写代码' },
+  buildNode: { icon: '📦', label: '项目构建' },
   visualEditNode: { icon: '🎨', label: '执行修改' },
   qualityCheckNode: { icon: '🔍', label: '代码质量检查' },
   codeFixNode: { icon: '🔧', label: '修复代码' },
@@ -118,6 +119,7 @@ const NEXT_NODE: Record<string, string> = {
   imagePlanNode: 'imageFetchNode',
   imageFetchNode: 'promptEnhanceNode',
   promptEnhanceNode: 'codeGenNode',
+  codeGenNode: 'qualityCheckNode',
   // qualityCheckNode 是条件边，在 handler 中根据结果动态预显示
 }
 
@@ -137,9 +139,10 @@ const rightView = ref<'code' | 'preview'>('code')
 
 // Get the latest code content for the right panel
 const currentAIContent = computed(() => {
-  if (codeContent.value) return codeContent.value
-  if (fileCodeContent.value) return fileCodeContent.value
-  return ''
+  // 流式生成中：优先展示实时流式内容
+  if (sending.value) return codeContent.value || fileCodeContent.value || ''
+  // 生成完成后：优先使用 API 返回的磁盘文件内容（更准确）
+  return fileCodeContent.value || codeContent.value || ''
 })
 
 const statusLabel = computed(() => {
@@ -372,13 +375,6 @@ async function sendToAI(text: string) {
   let buffer = ''
   let rafId = 0
 
-  function flushBuffer() {
-    const target = messages.value.find((m) => m.id === statusMsgId)
-    if (target && buffer) { target.content += buffer; buffer = '' }
-    scrollToBottom()
-    rafId = 0
-  }
-
   function flushBufferChat() {
     const target = messages.value.find((m) => m.id === chatMsgId)
     if (target && buffer) { target.content += buffer; buffer = '' }
@@ -412,6 +408,19 @@ async function sendToAI(text: string) {
               const old = statusItems.findIndex(it => it.nodeKey === data.node)
               if (old >= 0) statusItems.splice(old, 1)
               statusItems.push({ icon: cfg.icon, label: cfg.label, status: 'running', nodeKey: data.node })
+
+              // buildNode 启动时，将前置节点标记为完成
+              if (data.node === 'buildNode') {
+                const cwIdx = statusItems.findIndex(it => it.nodeKey === 'codeWriting')
+                if (cwIdx >= 0) {
+                  statusItems[cwIdx] = { icon: '💻', label: '编写代码', status: 'done', detail: '已完成' }
+                }
+                const veIdx = statusItems.findIndex(it => it.nodeKey === 'visualEditNode')
+                if (veIdx >= 0) {
+                  statusItems[veIdx] = { icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' }
+                }
+              }
+
               syncStatus()
             }
           }
@@ -420,6 +429,7 @@ async function sendToAI(text: string) {
 
       // tool_executed：节点执行完毕 → 更新为 "done" 状态
       if (event.type === 'tool_executed') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const eventData = event.data as { node?: string; message?: string; data?: Record<string, any> } | undefined
         const node = eventData?.node
         const msg = eventData?.message
@@ -458,7 +468,14 @@ async function sendToAI(text: string) {
               syncStatus()
             }
           } else if (node === 'visualEditNode') {
-            statusItems.push({ icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' })
+            // 插入到 buildNode 之前，保证"执行修改"在"项目构建"前面
+            const buildIdx = statusItems.findIndex(it => it.nodeKey === 'buildNode')
+            const veDoneItem: StatusItem = { icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' }
+            if (buildIdx >= 0) {
+              statusItems.splice(buildIdx, 0, veDoneItem)
+            } else {
+              statusItems.push(veDoneItem)
+            }
             // 预显示 qualityCheckNode
             if (!isChatMode) {
               const qcCfg = NODE_LABELS['qualityCheckNode']
@@ -484,6 +501,17 @@ async function sendToAI(text: string) {
             statusItems.push({ icon: '✨', label: '优化提示词', status: 'done', detail: '已完成' })
           } else if (node === 'persistNode') {
             statusItems.push({ icon: '✅', label: '生成完成', status: 'done', detail: '已完成' })
+          } else if (node === 'buildNode') {
+            const step = nodeData?.step
+            const isDone = nodeData?.result === 'success'
+            const buildItem = { icon: '📦', label: '项目构建', status: (isDone ? 'done' : 'running') as StatusItem['status'], detail: isDone ? '构建完成' : step === 'npm_build' ? '打包中...' : step === 'npm_install' ? '安装依赖...' : '构建中...', nodeKey: 'buildNode' }
+            // 将构建节点插入到质检节点之前（可视化编辑流程：修改→构建→质检）
+            const qcIdx = statusItems.findIndex(it => it.nodeKey === 'qualityCheckNode')
+            if (qcIdx >= 0) {
+              statusItems.splice(qcIdx, 0, buildItem)
+            } else {
+              statusItems.push(buildItem)
+            }
           } else if (node === 'qualityCheckNode') {
             const passed = nodeData?.pass ?? (nodeData?.reason?.toLowerCase()?.includes('ok'))
             statusItems.push({ icon: '🔍', label: '代码质量检查', status: passed ? 'done' : 'warning', detail: passed ? '通过' : nodeData?.reason || '未通过' })
@@ -595,7 +623,8 @@ async function sendToAI(text: string) {
       refreshAppInfo()
       scrollToBottom()
     },
-    onError(err) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onError(_err) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
 
       if (isChatMode) {
@@ -897,7 +926,6 @@ onMounted(() => {
   window.addEventListener('message', handleIframeClick)
 })
 onUnmounted(() => {
-  currentEventSource?.close()
   currentAbortController?.abort()
   window.removeEventListener('message', handleIframeClick)
 })
@@ -923,7 +951,7 @@ onUnmounted(() => {
           <button class="switch-btn" :class="{ active: rightView === 'code' }" @click="rightView = 'code'; showPreview = true">
             <CodeOutlined /> 代码
           </button>
-          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'; showPreview = true" :disabled="!deployKey">
+          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'; showPreview = true" :disabled="!deployKey || sending">
             <EyeOutlined /> 预览
           </button>
         </div>
