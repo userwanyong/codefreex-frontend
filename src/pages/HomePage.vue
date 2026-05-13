@@ -675,7 +675,7 @@ onMounted(() => {
 }
 
 .app-info {
-  padding: var(--space-5);
+  padding: var(--space-3) var(--space-4);
   flex: 1;
 }
 
@@ -683,7 +683,7 @@ onMounted(() => {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--space-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -692,7 +692,7 @@ onMounted(() => {
 .app-desc {
   font-size: 13px;
   color: var(--text-muted);
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--space-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
