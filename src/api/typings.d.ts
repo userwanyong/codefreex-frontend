@@ -108,7 +108,7 @@ declare namespace API {
     appName?: string
     description?: string
     initPrompt: string
-    tags?: string[]
+    tagIds?: number[]
   }
 
   type AppEditRequest = {
@@ -117,7 +117,7 @@ declare namespace API {
     description?: string
     cover?: string
     initPrompt?: string
-    tags?: string[]
+    tagIds?: number[]
     isPublic?: number
   }
 
@@ -189,10 +189,33 @@ declare namespace API {
     id?: string
     userId?: string
     inviterId?: string
+    nickname?: string
+    avatar?: string
+    status?: string
     totalCredits?: number
     remainingCredits?: number
     createTime?: string
     updateTime?: string
+  }
+
+  type AdminUserVO = {
+    userId?: string
+    nickname?: string
+    avatar?: string
+    email?: string
+    phone?: string
+    roles?: string[]
+    status?: string
+    totalCredits?: number
+    remainingCredits?: number
+    createTime?: string
+  }
+
+  type UserQueryRequest = {
+    pageNum?: number
+    pageSize?: number
+    searchKey?: string
+    status?: string
   }
 
   // === Chat History ===
@@ -212,6 +235,14 @@ declare namespace API {
   type AppStatus = 'draft' | 'generating' | 'generated' | 'deployed' | 'disabled'
   type CodeGenType = 'html' | 'multi_file' | 'vue_project'
   type InviteStatus = 'unused' | 'partial' | 'used' | 'expired' | 'disabled'
+
+  // === Tag ===
+  type TagVO = {
+    id?: number
+    name?: string
+    sortOrder?: number
+    appCount?: number
+  }
 
   // === Workflow ===
   type WorkflowNode =

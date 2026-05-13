@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { RocketOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { createApp } from '@/api/appController'
+import { getAllTags } from '@/api/tagController'
 import { parseResponseData } from '@/utils/response'
 
 const router = useRouter()
 const loading = ref(false)
+const tagOptions = ref<API.TagVO[]>([])
 
 const form = reactive({
   initPrompt: '',
   appName: '',
   description: '',
-  tags: [] as string[],
+  tagIds: [] as number[],
 })
 
 async function handleCreate() {
@@ -28,7 +30,7 @@ async function handleCreate() {
       initPrompt: form.initPrompt,
       appName: form.appName || undefined,
       description: form.description || undefined,
-      tags: form.tags.length > 0 ? form.tags : undefined,
+      tagIds: form.tagIds.length > 0 ? form.tagIds : undefined,
     })
     if (res.data?.code === 0 && res.data.data) {
       const appData = res.data.data as API.App
@@ -46,6 +48,17 @@ async function handleCreate() {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  try {
+    const res = await getAllTags()
+    if (res.data?.code === 0 && res.data.data) {
+      tagOptions.value = parseResponseData<API.TagVO[]>(res.data.data)
+    }
+  } catch {
+    // ignore
+  }
+})
 </script>
 
 <template>
@@ -89,10 +102,11 @@ async function handleCreate() {
 
         <a-form-item label="标签">
           <a-select
-            v-model:value="form.tags"
-            mode="tags"
-            placeholder="输入标签后回车（可选）"
-            :max-count="5"
+            v-model:value="form.tagIds"
+            mode="multiple"
+            placeholder="选择标签（可选）"
+            :max-count="3"
+            :options="tagOptions.map(t => ({ label: t.name, value: t.id }))"
           />
         </a-form-item>
 

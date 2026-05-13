@@ -401,7 +401,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Tabs: WeChat / Email -->
-          <a-tabs v-model:activeKey="loginTab" centered class="auth-tabs">
+          <a-tabs v-model:activeKey="loginTab" centered destroyInactiveTabPane class="auth-tabs">
             <!-- WeChat Tab -->
             <a-tab-pane key="wechat" tab="微信登录">
               <div class="wechat-wrapper">

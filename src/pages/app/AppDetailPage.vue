@@ -23,6 +23,7 @@ import {
   StopOutlined,
 } from '@ant-design/icons-vue'
 import { getApp, editApp, deleteApp, deployApp, cancelDeploy, downloadApp } from '@/api/appController'
+import { getAllTags } from '@/api/tagController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
 
@@ -32,7 +33,8 @@ const userStore = useUserStore()
 const app = ref<API.AppVO | null>(null)
 const loading = ref(true)
 const editModalVisible = ref(false)
-const editForm = ref({ appName: '', description: '', tags: [] as string[], isPublic: 0 })
+const editForm = ref({ appName: '', description: '', tagIds: [] as number[], isPublic: 0 })
+const tagOptions = ref<API.TagVO[]>([])
 const deploying = ref(false)
 
 const canDeploy = computed(() => {
@@ -99,12 +101,25 @@ async function loadApp() {
   }
 }
 
-function openEditModal() {
+async function openEditModal() {
   if (!app.value) return
+  // 加载预设标签选项
+  try {
+    const res = await getAllTags()
+    if (res.data?.code === 0 && res.data.data) {
+      tagOptions.value = parseResponseData<API.TagVO[]>(res.data.data)
+    }
+  } catch {
+    // ignore
+  }
+  // 根据标签名称匹配 ID
+  const tagIds = (app.value.tags || [])
+    .map(name => tagOptions.value.find(t => t.name === name)?.id)
+    .filter((id): id is number => id !== undefined)
   editForm.value = {
     appName: app.value.appName || '',
     description: app.value.description || '',
-    tags: app.value.tags || [],
+    tagIds,
     isPublic: app.value.isPublic ?? 0,
   }
   editModalVisible.value = true
@@ -133,7 +148,7 @@ async function handleEdit() {
       id: app.value.id,
       appName: editForm.value.appName,
       description: editForm.value.description,
-      tags: editForm.value.tags,
+      tagIds: editForm.value.tagIds,
       isPublic: editForm.value.isPublic,
     })
     if (res.data?.code === 0) {
@@ -434,7 +449,8 @@ onMounted(() => loadApp())
           <a-textarea v-model:value="editForm.description" :rows="3" />
         </a-form-item>
         <a-form-item label="标签">
-          <a-select v-model:value="editForm.tags" mode="tags" placeholder="输入标签后回车" />
+          <a-select v-model:value="editForm.tagIds" mode="multiple" placeholder="选择标签" :max-count="3"
+            :options="tagOptions.map(t => ({ label: t.name, value: t.id }))" />
         </a-form-item>
         <a-form-item label="是否公开">
           <a-switch

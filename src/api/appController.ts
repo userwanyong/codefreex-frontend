@@ -40,10 +40,17 @@ export async function getMyApps(pageNum = 1, pageSize = 10) {
 }
 
 /** 获取精选应用列表（游标分页） */
-export async function getFeaturedApps(cursor?: string, size = 10) {
+export async function getFeaturedApps(cursor?: string, size = 10, tag?: string) {
   return request<API.BaseResponse<API.FeaturedAppResponse>>('/app/featured/list', {
     method: 'GET',
-    params: { cursor, size },
+    params: { cursor, size, tag },
+  })
+}
+
+/** 获取精选应用的所有标签 */
+export async function getFeaturedTags() {
+  return request<API.BaseResponse<string[]>>('/app/featured/tags', {
+    method: 'GET',
   })
 }
 

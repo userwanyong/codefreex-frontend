@@ -109,10 +109,21 @@ const router = createRouter({
           component: () => import('@/pages/admin/AdminInvitePage.vue'),
         },
         {
+          path: 'user',
+          name: 'adminusers',
+          component: () => import('@/pages/admin/AdminUserPage.vue'),
+          alias: ['/admin/users'],
+        },
+        {
           path: 'redeem',
           name: 'adminredeems',
           component: () => import('@/pages/admin/AdminRedeemPage.vue'),
           alias: ['/admin/redeems'],
+        },
+        {
+          path: 'tags',
+          name: 'admintags',
+          component: () => import('@/pages/admin/AdminTagPage.vue'),
         },
       ],
     },

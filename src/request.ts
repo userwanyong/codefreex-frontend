@@ -33,9 +33,8 @@ myAxios.interceptors.response.use(
         localStorage.removeItem('codefreex_token')
         window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`
       }
-    } else if (data.code === 40101) {
-      message.error(data.message || '无权限访问')
     }
+    // 40101 无权限错误由各组件自行处理，避免重复弹窗
     return response
   },
   (error) => {

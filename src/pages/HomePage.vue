@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { EyeOutlined, LikeOutlined, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined, UserOutlined } from '@ant-design/icons-vue'
-import { getFeaturedApps, createApp } from '@/api/appController'
+import { getFeaturedApps, getFeaturedTags, createApp } from '@/api/appController'
 import { optimizePrompt } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
@@ -18,6 +18,8 @@ const optimizing = ref(false)
 const hasNext = ref(false)
 const nextCursor = ref<string | undefined>(undefined)
 const promptText = ref('')
+const tags = ref<string[]>([])
+const activeTag = ref<string | null>(null)
 
 
 const statusColors: Record<string, string> = {
@@ -89,7 +91,11 @@ async function loadApps(isLoadMore = false) {
   if (loading.value) return
   loading.value = true
   try {
-    const res = await getFeaturedApps(isLoadMore ? nextCursor.value : undefined, 12)
+    const res = await getFeaturedApps(
+      isLoadMore ? nextCursor.value : undefined,
+      12,
+      activeTag.value || undefined,
+    )
     if (res.data?.code === 0 && res.data.data) {
       const data = parseResponseData<API.FeaturedAppResponse>(res.data.data)
       const records = data.records || []
@@ -162,7 +168,26 @@ async function handleCreateApp() {
   }
 }
 
-onMounted(() => loadApps())
+async function loadTags() {
+  try {
+    const res = await getFeaturedTags()
+    if (res.data?.code === 0 && res.data.data) {
+      tags.value = parseResponseData<string[]>(res.data.data)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function selectTag(tag: string | null) {
+  activeTag.value = tag
+  loadApps()
+}
+
+onMounted(() => {
+  loadApps()
+  loadTags()
+})
 </script>
 
 <template>
@@ -246,8 +271,28 @@ onMounted(() => loadApps())
     <!-- Featured Apps -->
     <section class="apps-section">
       <div class="section-header">
-        <h2>精选应用</h2>
-        <p>探索社区创建的优秀应用</p>
+        <div class="section-header-left">
+          <h2>精选应用</h2>
+          <p>探索社区创建的优秀应用</p>
+        </div>
+        <div v-if="tags.length" class="tag-filter">
+          <button
+            class="tag-filter-btn"
+            :class="{ active: !activeTag }"
+            @click="selectTag(null)"
+          >
+            全部
+          </button>
+          <button
+            v-for="t in tags"
+            :key="t"
+            class="tag-filter-btn"
+            :class="{ active: activeTag === t }"
+            @click="selectTag(t)"
+          >
+            {{ t }}
+          </button>
+        </div>
       </div>
 
       <a-spin :spinning="loading && apps.length === 0">
@@ -265,7 +310,7 @@ onMounted(() => loadApps())
                 {{ statusLabels[app.status] || app.status }}
               </div>
               <div v-if="app.tags?.length" class="app-tags">
-                <span v-for="tag in app.tags.slice(0, 2)" :key="tag" class="tag" :style="getTagColor(tag)">{{ tag }}</span>
+                <span v-for="tag in app.tags.slice(0, 3)" :key="tag" class="tag" :style="getTagColor(tag)">{{ tag }}</span>
               </div>
             </div>
             <div class="app-info" :style="{ background: getAppInfoBg(app.id || '') }">
@@ -514,15 +559,20 @@ onMounted(() => loadApps())
   position: relative;
   z-index: 1;
   padding: var(--space-8) var(--space-6) var(--space-16);
-  max-width: 1200px;
+  max-width: 1260px;
   margin: 0 auto;
 }
 
 .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
   margin-bottom: var(--space-8);
+  flex-wrap: wrap;
 }
 
-.section-header h2 {
+.section-header-left h2 {
   font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
@@ -530,15 +580,47 @@ onMounted(() => loadApps())
   letter-spacing: -0.5px;
 }
 
-.section-header p {
+.section-header-left p {
   font-size: 15px;
   color: var(--text-secondary);
   margin: 0;
 }
 
+.tag-filter {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+
+.tag-filter-btn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  font-family: var(--font-sans);
+}
+
+.tag-filter-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tag-filter-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .apps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-5);
 }
 
