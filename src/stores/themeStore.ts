@@ -44,7 +44,7 @@ const lightAntConfig = {
 
 export const useThemeStore = defineStore('theme', () => {
   const stored = localStorage.getItem(STORAGE_KEY)
-  const themeMode = ref<'dark' | 'light'>(stored === 'light' ? 'light' : 'dark')
+  const themeMode = ref<'dark' | 'light'>(stored === 'dark' ? 'dark' : 'light')
   const isDark = computed(() => themeMode.value === 'dark')
 
   function applyTheme() {

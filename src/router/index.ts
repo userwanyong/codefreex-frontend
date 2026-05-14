@@ -130,6 +130,11 @@ const router = createRouter({
           name: 'adminusage',
           component: () => import('@/pages/admin/AdminUsagePage.vue'),
         },
+        {
+          path: 'featured-applications',
+          name: 'adminfeatured',
+          component: () => import('@/pages/admin/AdminFeaturedPage.vue'),
+        },
       ],
     },
 

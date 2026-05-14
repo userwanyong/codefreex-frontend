@@ -101,6 +101,14 @@ onMounted(() => loadApps())
     </div>
 
     <a-table :data-source="apps" :loading="loading" :pagination="false" row-key="id">
+      <a-table-column title="封面" width="80">
+        <template #default="{ record }">
+          <div class="cell-cover">
+            <img v-if="record.cover" :src="record.cover" :alt="record.appName" class="cover-thumb" />
+            <div v-else class="cover-placeholder">{{ (record.appName || 'A')[0]?.toUpperCase() }}</div>
+          </div>
+        </template>
+      </a-table-column>
       <a-table-column title="应用名称" data-index="appName" ellipsis>
         <template #default="{ record }">
           <span class="cell-name">{{ record.appName || '未命名应用' }}</span>
@@ -196,6 +204,32 @@ onMounted(() => loadApps())
 
 .cell-name {
   font-weight: 500;
+}
+
+.cell-cover {
+  width: 48px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cover-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .pagination-wrapper {

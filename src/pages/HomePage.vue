@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { EyeOutlined, LikeOutlined, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined, UserOutlined } from '@ant-design/icons-vue'
-import { getFeaturedApps, getFeaturedTags, createApp } from '@/api/appController'
+import { EyeOutlined, LikeOutlined, LikeFilled, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined, UserOutlined } from '@ant-design/icons-vue'
+import { getFeaturedApps, getFeaturedTags, createApp, likeApp } from '@/api/appController'
 import { optimizePrompt } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
@@ -184,6 +184,38 @@ function selectTag(tag: string | null) {
   loadApps()
 }
 
+// 点赞状态
+const likedAppIds = ref<Set<string>>(new Set())
+const likingAppIds = ref<Set<string>>(new Set())
+
+async function handleLike(app: API.AppVO, e: Event) {
+  e.stopPropagation()
+  if (!userStore.isLoggedIn) {
+    message.warning('请先登录')
+    router.push('/user/login')
+    return
+  }
+  if (!app.id || likingAppIds.value.has(app.id)) return
+  likingAppIds.value.add(app.id)
+  try {
+    const res = await likeApp(app.id)
+    if (res.data?.code === 0 && res.data.data !== undefined) {
+      const liked = res.data.data
+      if (liked) {
+        likedAppIds.value.add(app.id)
+        app.likeCount = (app.likeCount ?? 0) + 1
+      } else {
+        likedAppIds.value.delete(app.id)
+        app.likeCount = Math.max(0, (app.likeCount ?? 1) - 1)
+      }
+    }
+  } catch {
+    // ignore
+  } finally {
+    likingAppIds.value.delete(app.id)
+  }
+}
+
 onMounted(() => {
   loadApps()
   loadTags()
@@ -329,8 +361,13 @@ onMounted(() => {
                     <EyeOutlined />
                     {{ app.viewCount ?? 0 }}
                   </span>
-                  <span class="meta-item">
-                    <LikeOutlined />
+                  <span
+                    class="meta-item like-btn"
+                    :class="{ liked: likedAppIds.has(app.id || '') }"
+                    @click="handleLike(app, $event)"
+                  >
+                    <LikeFilled v-if="likedAppIds.has(app.id || '')" />
+                    <LikeOutlined v-else />
                     {{ app.likeCount ?? 0 }}
                   </span>
                 </div>
@@ -754,6 +791,21 @@ onMounted(() => {
   gap: var(--space-1);
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.like-btn {
+  cursor: pointer;
+  transition: color 0.2s;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.like-btn:hover {
+  color: #EF4444;
+}
+
+.like-btn.liked {
+  color: #EF4444;
 }
 
 .app-tags {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AppstoreOutlined, GiftOutlined, TagsOutlined, TeamOutlined, BookOutlined, BarChartOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, GiftOutlined, TagsOutlined, TeamOutlined, BookOutlined, BarChartOutlined, StarOutlined } from '@ant-design/icons-vue'
 import { useThemeStore } from '@/stores/themeStore'
 
 const router = useRouter()
@@ -11,6 +11,7 @@ const themeStore = useThemeStore()
 const menuItems = [
   { key: 'admin-user', label: '用户管理', path: '/admin/user', icon: TeamOutlined },
   { key: 'admin-apps', label: '应用管理', path: '/admin/app', icon: AppstoreOutlined },
+  { key: 'admin-featured', label: '精选审批', path: '/admin/featured-applications', icon: StarOutlined },
   { key: 'admin-tags', label: '标签管理', path: '/admin/tags', icon: TagsOutlined },
   { key: 'admin-usage', label: '用量统计', path: '/admin/usage', icon: BarChartOutlined },
   { key: 'admin-invites', label: '邀请码管理', path: '/admin/invites', icon: GiftOutlined },

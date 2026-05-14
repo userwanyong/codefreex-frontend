@@ -15,6 +15,7 @@ import {
   MessageOutlined,
   GlobalOutlined,
   StarOutlined,
+  StarFilled,
   RocketOutlined,
   FileTextOutlined,
   CheckCircleOutlined,
@@ -22,8 +23,19 @@ import {
   DownloadOutlined,
   LinkOutlined,
   StopOutlined,
+  CrownOutlined,
 } from '@ant-design/icons-vue'
-import { getApp, editApp, deleteApp, deployApp, cancelDeploy, downloadApp, likeApp } from '@/api/appController'
+import {
+  getApp,
+  editApp,
+  deleteApp,
+  deployApp,
+  cancelDeploy,
+  downloadApp,
+  likeApp,
+  applyFeatured,
+  getFeaturedApplicationStatus,
+} from '@/api/appController'
 import { getAllTags } from '@/api/tagController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
@@ -37,6 +49,12 @@ const editModalVisible = ref(false)
 const editForm = ref({ appName: '', description: '', tagIds: [] as number[], isPublic: 0 })
 const tagOptions = ref<API.TagVO[]>([])
 const deploying = ref(false)
+
+// 精选申请状态
+const featuredApplication = ref<API.FeaturedApplication | null>(null)
+const applyModalVisible = ref(false)
+const applyReason = ref('')
+const applying = ref(false)
 
 const canDeploy = computed(() => {
   if (!app.value) return false
@@ -56,6 +74,26 @@ const isOwner = computed(() => String(app.value?.userId) === String(userStore.lo
 
 const isLiked = ref(false)
 const likeLoading = ref(false)
+
+// 是否可以申请精选：已部署 + 是自己的 + 未精选 + 无待审核申请
+const canApplyFeatured = computed(() => {
+  if (!app.value || !isOwner.value) return false
+  if (app.value.status !== 'deployed') return false
+  if (app.value.isFeatured === 1) return false
+  if (featuredApplication.value?.status === 'pending') return false
+  return true
+})
+
+// 精选申请状态文本
+const featuredStatusText = computed(() => {
+  if (!featuredApplication.value) return ''
+  const map: Record<string, string> = {
+    pending: '审核中',
+    approved: '已通过',
+    rejected: '已拒绝',
+  }
+  return map[featuredApplication.value.status || ''] || ''
+})
 
 async function handleLike() {
   if (!app.value?.id || likeLoading.value) return
@@ -89,29 +127,8 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   disabled: { label: '已禁用', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.15)' },
 }
 
-const darkGradients = [
-  'linear-gradient(135deg, #065F46 0%, #064E3B 100%)',
-  'linear-gradient(135deg, #1E3A5F 0%, #1E293B 100%)',
-  'linear-gradient(135deg, #4C1D95 0%, #2D1B69 100%)',
-  'linear-gradient(135deg, #92400E 0%, #78350F 100%)',
-  'linear-gradient(135deg, #065F46 0%, #1E3A5F 100%)',
-  'linear-gradient(135deg, #4C1D95 0%, #065F46 100%)',
-]
-
-const lightGradients = [
-  'linear-gradient(135deg, #A7F3D0 0%, #6EE7B7 100%)',
-  'linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%)',
-  'linear-gradient(135deg, #DDD6FE 0%, #C4B5FD 100%)',
-  'linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%)',
-  'linear-gradient(135deg, #A7F3D0 0%, #BFDBFE 100%)',
-  'linear-gradient(135deg, #DDD6FE 0%, #A7F3D0 100%)',
-]
-
-function getGradient(name: string) {
-  const hash = (name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light'
-  const list = isLight ? lightGradients : darkGradients
-  return list[hash % list.length]
+function getAvatarFallback(name: string) {
+  return (name || 'A')[0]?.toUpperCase()
 }
 
 async function loadApp() {
@@ -123,6 +140,10 @@ async function loadApp() {
       app.value = parseResponseData<API.AppVO>(res.data.data)
       isLiked.value = app.value?.isLiked ?? false
     }
+    // 加载精选申请状态（仅自己的应用）
+    if (userStore.isLoggedIn && isOwner.value) {
+      await loadFeaturedApplication()
+    }
   } catch {
     // ignore
   } finally {
@@ -130,9 +151,40 @@ async function loadApp() {
   }
 }
 
+async function loadFeaturedApplication() {
+  if (!appId.value) return
+  try {
+    const res = await getFeaturedApplicationStatus(appId.value)
+    if (res.data?.code === 0 && res.data.data) {
+      featuredApplication.value = parseResponseData<API.FeaturedApplication>(res.data.data)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function handleApplyFeatured() {
+  if (!app.value?.id || applying.value) return
+  applying.value = true
+  try {
+    const res = await applyFeatured(app.value.id, applyReason.value || undefined)
+    if (res.data?.code === 0) {
+      message.success('申请已提交，等待管理员审核')
+      applyModalVisible.value = false
+      applyReason.value = ''
+      await loadFeaturedApplication()
+    } else {
+      message.error(res.data?.message || '申请失败')
+    }
+  } catch {
+    message.error('申请失败')
+  } finally {
+    applying.value = false
+  }
+}
+
 async function openEditModal() {
   if (!app.value) return
-  // 加载预设标签选项
   try {
     const res = await getAllTags()
     if (res.data?.code === 0 && res.data.data) {
@@ -141,7 +193,6 @@ async function openEditModal() {
   } catch {
     // ignore
   }
-  // 根据标签名称匹配 ID
   const tagIds = (app.value.tags || [])
     .map(name => tagOptions.value.find(t => t.name === name)?.id)
     .filter((id): id is number => id !== undefined)
@@ -290,7 +341,6 @@ onMounted(() => loadApp())
 
 <template>
   <div class="detail-page">
-    <!-- Back button -->
     <a-button type="text" class="back-btn" @click="router.back()">
       <ArrowLeftOutlined />
       返回
@@ -298,172 +348,121 @@ onMounted(() => loadApp())
 
     <a-spin :spinning="loading">
       <template v-if="app">
-        <div class="detail-layout">
-          <!-- Left: Sidebar -->
-          <aside class="detail-sidebar">
-            <!-- App Cover -->
-            <div class="sidebar-cover" :style="!app.cover ? { background: getGradient(app.appName || '') } : {}">
-              <img v-if="app.cover" :src="app.cover" :alt="app.appName" class="cover-img" />
-              <span v-else class="cover-letter">{{ (app.appName || 'A')[0]?.toUpperCase() }}</span>
+        <!-- 顶部横幅：封面图 + 核心信息 -->
+        <div class="detail-banner">
+          <div class="banner-cover">
+            <img v-if="app.cover" :src="app.cover" :alt="app.appName" class="cover-img" />
+            <div v-else class="cover-placeholder">
+              <span class="cover-letter">{{ getAvatarFallback(app.appName || '') }}</span>
             </div>
-
-            <!-- App Identity -->
-            <div class="sidebar-identity">
+          </div>
+          <div class="banner-body">
+            <div class="banner-top">
               <h1 class="app-name">{{ app.appName || '未命名应用' }}</h1>
-              <div class="badges-row">
-                <span
-                  class="status-badge"
-                  :style="{
-                    color: statusConfig[app.status || 'draft']?.color,
-                    background: statusConfig[app.status || 'draft']?.bg,
-                  }"
-                >
-                  {{ statusConfig[app.status || 'draft']?.label }}
-                </span>
-                <span class="stat-badge">
-                  <EyeOutlined /> {{ app.viewCount ?? 0 }}
-                </span>
-                <span
-                  class="stat-badge like-btn"
-                  :class="{ 'liked': isLiked }"
-                  @click.stop="handleLike"
-                >
-                  <LikeFilled v-if="isLiked" />
-                  <LikeOutlined v-else />
-                  {{ app.likeCount ?? 0 }}
-                </span>
-              </div>
-              <p class="app-desc">{{ app.description || '暂无描述' }}</p>
+              <span
+                class="status-badge"
+                :style="{
+                  color: statusConfig[app.status || 'draft']?.color,
+                  background: statusConfig[app.status || 'draft']?.bg,
+                }"
+              >
+                {{ statusConfig[app.status || 'draft']?.label }}
+              </span>
+              <span v-if="app.isFeatured === 1" class="featured-badge">
+                <CrownOutlined /> 精选
+              </span>
             </div>
-
-            <!-- Divider -->
-            <div class="sidebar-divider" />
-
-            <!-- Meta Info -->
-            <div class="meta-list">
-              <div class="meta-row">
-                <CodeOutlined class="meta-icon" />
-                <span class="meta-label">生成类型</span>
-                <span class="meta-value">{{ app.codeGenType || '-' }}</span>
-              </div>
-              <div class="meta-row">
-                <GlobalOutlined class="meta-icon" />
-                <span class="meta-label">是否公开</span>
-                <span class="meta-value" :class="app.isPublic === 1 ? 'val-yes' : 'val-no'">
-                  <CheckCircleOutlined v-if="app.isPublic === 1" />
-                  <CloseCircleOutlined v-else />
-                  {{ app.isPublic === 1 ? '公开' : '私有' }}
-                </span>
-              </div>
-              <div class="meta-row">
-                <StarOutlined class="meta-icon" />
-                <span class="meta-label">是否精选</span>
-                <span class="meta-value" :class="app.isFeatured === 1 ? 'val-yes' : 'val-no'">
-                  <CheckCircleOutlined v-if="app.isFeatured === 1" />
-                  <CloseCircleOutlined v-else />
-                  {{ app.isFeatured === 1 ? '精选' : '普通' }}
-                </span>
-              </div>
-              <div class="meta-row">
-                <ClockCircleOutlined class="meta-icon" />
-                <span class="meta-label">创建时间</span>
-                <span class="meta-value">{{ app.createTime || '-' }}</span>
-              </div>
-              <div class="meta-row">
-                <RocketOutlined class="meta-icon" />
-                <span class="meta-label">部署时间</span>
-                <span class="meta-value">{{ app.deployedTime || '-' }}</span>
-              </div>
+            <div class="banner-meta">
+              <span class="stat-item">
+                <EyeOutlined /> {{ app.viewCount ?? 0 }}
+              </span>
+              <span
+                class="stat-item like-btn"
+                :class="{ liked: isLiked }"
+                @click.stop="handleLike"
+              >
+                <LikeFilled v-if="isLiked" />
+                <LikeOutlined v-else />
+                {{ app.likeCount ?? 0 }}
+              </span>
+              <span v-if="featuredStatusText" class="stat-item apply-status-tag">
+                <ClockCircleOutlined /> {{ featuredStatusText }}
+              </span>
             </div>
-
-            <!-- Action Buttons -->
-            <div v-if="isOwner" class="sidebar-actions">
-              <a-button block class="action-primary" @click="router.push(`/app/${appId}/chat`)">
-                <MessageOutlined />
-                AI 工作台
+            <!-- 详细信息 -->
+            <div class="banner-detail">
+              <span class="detail-item">
+                <CodeOutlined /> {{ app.codeGenType || '-' }}
+              </span>
+              <span class="detail-item" :class="app.isPublic === 1 ? 'val-yes' : 'val-no'">
+                <GlobalOutlined /> {{ app.isPublic === 1 ? '公开' : '私有' }}
+              </span>
+              <span class="detail-item">
+                <ClockCircleOutlined /> {{ app.createTime?.slice(0, 10) || '-' }}
+              </span>
+              <template v-if="app?.status === 'deployed' && deployedUrl">
+                <a :href="deployedUrl" target="_blank" class="detail-item link-item" @click.stop>
+                  <LinkOutlined /> 访问部署
+                </a>
+              </template>
+              <a v-if="isOwner" class="detail-item link-item" @click.stop="handleDownload">
+                <DownloadOutlined /> 下载源码
+              </a>
+            </div>
+            <!-- 标签 -->
+            <div v-if="app.tags?.length" class="banner-tags">
+              <span v-for="tag in app.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+            </div>
+            <!-- 操作按钮 -->
+            <div v-if="isOwner" class="banner-actions">
+              <a-button type="primary" size="small" @click="router.push(`/app/${appId}/chat`)">
+                <MessageOutlined /> AI 工作台
               </a-button>
-              <div v-if="app?.status === 'deployed'" class="action-row">
-                <a-button
-                  class="action-deploy-row"
-                  :loading="deploying"
-                  @click="handleDeploy"
-                >
-                  <GlobalOutlined />
-                  重新部署
-                </a-button>
-                <a-button class="action-danger" @click="handleCancelDeploy">
-                  <StopOutlined />
-                  取消部署
-                </a-button>
-              </div>
               <a-button
-                v-else-if="canDeploy"
-                block
-                class="action-deploy"
+                v-if="canDeploy && app?.status !== 'deployed'"
+                size="small"
                 :loading="deploying"
                 @click="handleDeploy"
               >
-                <GlobalOutlined />
-                部署应用
+                <GlobalOutlined /> 部署
               </a-button>
-              <div class="action-row">
-                <a-button class="action-secondary" @click="handleDownload" style="flex:1">
-                  <DownloadOutlined />
-                  下载
+              <template v-if="app?.status === 'deployed'">
+                <a-button size="small" :loading="deploying" @click="handleDeploy">
+                  <GlobalOutlined /> 重新部署
                 </a-button>
-              </div>
-              <div v-if="app?.status === 'deployed' && deployedUrl" class="action-row">
-                <a-button class="action-link" style="flex:1">
-                  <a :href="deployedUrl" target="_blank" class="link-inner">
-                    <LinkOutlined />
-                    访问部署地址
-                  </a>
+                <a-button size="small" @click="handleCancelDeploy">
+                  <StopOutlined /> 取消部署
                 </a-button>
-              </div>
-              <div class="sidebar-divider" />
-              <div class="action-row">
-                <a-button class="action-secondary" @click="openEditModal">
-                  <EditOutlined />
-                  编辑
-                </a-button>
-                <a-button class="action-danger" @click="handleDelete">
-                  <DeleteOutlined />
-                  删除
-                </a-button>
-              </div>
+              </template>
+              <a-button v-if="canApplyFeatured" size="small" @click="applyModalVisible = true">
+                <StarOutlined /> 申请精选
+              </a-button>
+              <a-button size="small" @click="openEditModal">
+                <EditOutlined /> 编辑
+              </a-button>
+              <a-button size="small" danger @click="handleDelete">
+                <DeleteOutlined /> 删除
+              </a-button>
             </div>
-          </aside>
-
-          <!-- Right: Main Content -->
-          <div class="detail-main">
-            <!-- Initial Prompt -->
-            <section v-if="app.initPrompt" class="content-section">
-              <div class="section-header">
-                <FileTextOutlined class="section-icon" />
-                <h3 class="section-title">初始提示词</h3>
-              </div>
-              <div class="prompt-block">{{ app.initPrompt }}</div>
-            </section>
-
-            <!-- Tags -->
-            <section v-if="app.tags?.length" class="content-section">
-              <div class="section-header">
-                <TagOutlined class="section-icon" />
-                <h3 class="section-title">标签</h3>
-              </div>
-              <div class="tags-wrap">
-                <span v-for="tag in app.tags" :key="tag" class="tag-chip">{{ tag }}</span>
-              </div>
-            </section>
-
-            <!-- Empty prompt placeholder -->
-            <section v-if="!app.initPrompt && !app.tags?.length" class="content-section">
-              <div class="empty-hint">
-                <CodeOutlined class="empty-hint-icon" />
-                <p>暂无更多详细信息</p>
-              </div>
-            </section>
           </div>
+        </div>
+
+        <!-- 应用描述（折叠） -->
+        <div class="desc-section">
+          <a-collapse :bordered="false" class="desc-collapse">
+            <a-collapse-panel key="desc" header="应用描述">
+              <div class="desc-content">{{ app.description || '暂无描述' }}</div>
+            </a-collapse-panel>
+          </a-collapse>
+        </div>
+
+        <!-- 提示词（折叠） -->
+        <div v-if="app.initPrompt" class="prompt-section">
+          <a-collapse :bordered="false" class="desc-collapse">
+            <a-collapse-panel key="prompt" header="初始提示词">
+              <div class="desc-content">{{ app.initPrompt }}</div>
+            </a-collapse-panel>
+          </a-collapse>
         </div>
       </template>
 
@@ -474,7 +473,7 @@ onMounted(() => loadApp())
       </div>
     </a-spin>
 
-    <!-- Edit modal -->
+    <!-- 编辑弹窗 -->
     <a-modal v-model:open="editModalVisible" title="编辑应用" @ok="handleEdit" ok-text="保存">
       <a-form layout="vertical">
         <a-form-item label="应用名称">
@@ -498,6 +497,26 @@ onMounted(() => loadApp())
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <!-- 申请精选弹窗 -->
+    <a-modal
+      v-model:open="applyModalVisible"
+      title="申请精选"
+      :confirm-loading="applying"
+      @ok="handleApplyFeatured"
+      ok-text="提交申请"
+    >
+      <p style="color: var(--text-secondary); margin-bottom: 16px;">
+        申请精选后，管理员将审核您的应用。通过后将展示在首页精选区域。
+      </p>
+      <a-textarea
+        v-model:value="applyReason"
+        placeholder="请简要说明为什么您的应用应该被精选（选填）"
+        :rows="3"
+        :maxlength="200"
+        show-count
+      />
+    </a-modal>
   </div>
 </template>
 
@@ -505,15 +524,20 @@ onMounted(() => loadApp())
 .detail-page {
   max-width: 1100px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px - 48px);
+  overflow: hidden;
 }
 
 .back-btn {
   color: var(--text-secondary) !important;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .back-btn:hover {
@@ -521,98 +545,105 @@ onMounted(() => loadApp())
 }
 
 /* ============================================
-   Layout: Sidebar + Main
+   Banner: 封面 + 核心信息 + 操作
    ============================================ */
-.detail-layout {
-  display: grid;
-  grid-template-columns: 340px 1fr;
+.detail-banner {
+  display: flex;
   gap: var(--space-6);
-  align-items: start;
-}
-
-/* ============================================
-   Sidebar
-   ============================================ */
-.detail-sidebar {
+  padding: var(--space-5);
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
+  flex-shrink: 0;
+}
+
+.banner-cover {
+  width: 160px;
+  height: 100px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  position: sticky;
-  top: calc(60px + var(--space-6));
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-cover {
-  height: 55%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.sidebar-cover::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: linear-gradient(transparent, var(--bg-surface));
+  flex-shrink: 0;
 }
 
 .cover-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: top;
+}
+
+.cover-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cover-letter {
-  font-size: 64px;
+  font-size: 36px;
   font-weight: 800;
-  color: var(--watermark-color);
+  color: rgba(255, 255, 255, 0.8);
   font-family: var(--font-mono);
-  position: relative;
-  z-index: 1;
 }
 
-.sidebar-identity {
-  padding: 0 var(--space-6) var(--space-4);
-  margin-top: calc(-1 * var(--space-4));
-  position: relative;
-  z-index: 2;
+.banner-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.banner-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .app-name {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 var(--space-3);
-  letter-spacing: -0.3px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 3px 10px;
+  padding: 2px 10px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
-.badges-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-}
-
-.stat-badge {
+.featured-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
   font-size: 12px;
+  font-weight: 600;
+  color: #FAAD14;
+  background: rgba(250, 173, 20, 0.12);
+  flex-shrink: 0;
+}
+
+.banner-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -629,266 +660,108 @@ onMounted(() => loadApp())
   color: #EF4444;
 }
 
-.app-desc {
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin: 0;
+.apply-status-tag {
+  color: #F59E0B;
 }
 
-/* Divider */
-.sidebar-divider {
-  height: 1px;
-  background: var(--glass-border);
-  margin: var(--space-5) var(--space-6);
-}
-
-/* Meta list */
-.meta-list {
-  padding: 0 var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.meta-row {
+/* 详细信息行 */
+.banner-detail {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  font-size: 13px;
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
 
-.meta-icon {
-  color: var(--text-muted);
-  font-size: 14px;
-  width: 16px;
-  text-align: center;
-}
-
-.meta-label {
-  color: var(--text-muted);
-  min-width: 64px;
-}
-
-.meta-value {
-  color: var(--text-primary);
-  font-weight: 500;
-  margin-left: auto;
-  display: flex;
+.detail-item {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.val-yes {
+.detail-item.val-yes {
   color: #22C55E;
 }
 
-.val-no {
+.detail-item.val-no {
   color: var(--text-muted);
 }
 
-/* Sidebar actions */
-.sidebar-actions {
-  padding: var(--space-5) var(--space-6) var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.action-primary {
-  height: 42px;
-  border-radius: var(--radius-md) !important;
-  font-weight: 600;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-}
-
-.action-row {
-  display: flex;
-  gap: var(--space-3);
-}
-
-.action-secondary,
-.action-danger {
-  flex: 1;
-  height: 36px;
-  border-radius: var(--radius-md) !important;
-  font-size: 13px;
-}
-
-.action-secondary span,
-.action-danger span,
-.action-deploy-row span,
-.action-deploy span {
-  gap: 4px !important;
-}
-
-.action-secondary {
-  background: var(--bg-elevated) !important;
-  border: 1px solid var(--glass-border) !important;
-  color: var(--text-secondary) !important;
-}
-
-.action-secondary:hover {
-  border-color: var(--border-hover) !important;
-  color: var(--text-primary) !important;
-}
-
-.action-danger {
-  background: rgba(239, 68, 68, 0.1) !important;
-  border: 1px solid rgba(239, 68, 68, 0.2) !important;
-  color: #EF4444 !important;
-}
-
-.action-danger:hover {
-  background: rgba(239, 68, 68, 0.18) !important;
-}
-
-.action-deploy-row {
-  flex: 1;
-  height: 36px;
-  border-radius: var(--radius-md) !important;
-  font-weight: 600;
-  font-size: 13px;
-  background: linear-gradient(135deg, #3B82F6, #2563EB) !important;
-  border: none !important;
-  color: white !important;
-}
-
-.action-deploy {
-  height: 42px;
-  border-radius: var(--radius-md) !important;
-  font-weight: 600;
-  font-size: 14px;
-  background: linear-gradient(135deg, #3B82F6, #2563EB) !important;
-  border: none !important;
-  color: white !important;
-}
-
-.action-deploy:hover {
-  opacity: 0.9;
-}
-
-.action-link {
-  flex: 1;
-  height: 36px;
-  border-radius: var(--radius-md) !important;
-  font-size: 13px;
-  padding: 0 !important;
-  border: 1px solid rgba(59, 130, 246, 0.3) !important;
-  background: rgba(59, 130, 246, 0.08) !important;
-}
-
-.link-inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
+.link-item {
   color: #3B82F6 !important;
+  cursor: pointer;
   text-decoration: none;
-  font-size: 13px;
-  width: 100%;
-  height: 100%;
+  transition: color 0.2s;
 }
 
-.link-inner:hover {
+.link-item:hover {
   color: #2563EB !important;
 }
 
-/* ============================================
-   Main Content
-   ============================================ */
-.detail-main {
-  min-width: 0;
-}
-
-.content-section {
-  background: var(--bg-surface);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: var(--space-6);
-  margin-bottom: var(--space-5);
-  transition: border-color var(--duration-normal) var(--ease-out);
-}
-
-.content-section:hover {
-  border-color: var(--border-hover);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-}
-
-.section-icon {
-  color: var(--accent);
-  font-size: 16px;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-/* Prompt block */
-.prompt-block {
-  background: var(--bg-elevated);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: var(--font-sans);
-}
-
-/* Tags */
-.tags-wrap {
+/* 标签 */
+.banner-tags {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
 .tag-chip {
-  padding: 5px 16px;
+  padding: 2px 12px;
   background: var(--bg-elevated);
   border: 1px solid var(--glass-border);
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
-  transition: all var(--duration-fast) var(--ease-out);
 }
 
-.tag-chip:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+/* 操作按钮 */
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
-/* Empty hint */
-.empty-hint {
-  text-align: center;
-  padding: var(--space-12) 0;
+/* ============================================
+   Description Section (Collapsible)
+   ============================================ */
+.desc-section {
+  margin-top: var(--space-4);
+  flex-shrink: 0;
 }
 
-.empty-hint-icon {
-  font-size: 40px;
-  color: var(--text-disabled);
-  margin-bottom: var(--space-4);
+.desc-collapse {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-lg) !important;
 }
 
-.empty-hint p {
+.desc-collapse :deep(.ant-collapse-header) {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary) !important;
+  padding: var(--space-3) var(--space-5) !important;
+}
+
+.desc-collapse :deep(.ant-collapse-content-box) {
+  padding: 0 var(--space-5) var(--space-4) !important;
+}
+
+.desc-content {
   font-size: 14px;
-  color: var(--text-muted);
-  margin: 0;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================
+   Prompt Section (Collapsible)
+   ============================================ */
+.prompt-section {
+  margin-top: var(--space-4);
+  flex-shrink: 0;
 }
 
 /* ============================================
@@ -916,12 +789,22 @@ onMounted(() => loadApp())
    Responsive
    ============================================ */
 @media (max-width: 768px) {
-  .detail-layout {
-    grid-template-columns: 1fr;
+  .detail-banner {
+    flex-direction: column;
   }
 
-  .detail-sidebar {
-    position: static;
+  .banner-cover {
+    width: 100%;
+    height: 120px;
+  }
+
+  .banner-actions {
+    justify-content: flex-start;
+  }
+
+  .detail-page {
+    height: auto;
+    overflow: auto;
   }
 }
 </style>

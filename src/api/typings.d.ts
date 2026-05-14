@@ -272,6 +272,33 @@ declare namespace API {
   type CodeGenType = 'html' | 'multi_file' | 'vue_project'
   type InviteStatus = 'unused' | 'partial' | 'used' | 'expired' | 'disabled'
 
+  // === Featured Application ===
+  type FeaturedApplication = {
+    id?: string
+    appId?: string
+    userId?: string
+    status?: string  // pending / approved / rejected
+    reason?: string
+    adminRemark?: string
+    reviewerId?: string
+    reviewTime?: string
+    createTime?: string
+    updateTime?: string
+  }
+
+  // === Notification ===
+  type Notification = {
+    id?: string
+    userId?: string
+    title?: string
+    content?: string
+    type?: string
+    isRead?: number
+    relatedId?: string
+    createTime?: string
+    updateTime?: string
+  }
+
   // === Tag ===
   type TagVO = {
     id?: number

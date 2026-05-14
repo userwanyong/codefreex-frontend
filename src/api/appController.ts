@@ -119,3 +119,50 @@ export async function getLikeStatus(appId: string) {
     method: 'GET',
   })
 }
+
+/** 申请精选 */
+export async function applyFeatured(appId: string, reason?: string) {
+  return request<API.BaseResponse<API.FeaturedApplication>>(`/app/${appId}/apply-featured`, {
+    method: 'POST',
+    params: { reason },
+  })
+}
+
+/** 查询精选申请状态 */
+export async function getFeaturedApplicationStatus(appId: string) {
+  return request<API.BaseResponse<API.FeaturedApplication>>(`/app/${appId}/featured-application`, {
+    method: 'GET',
+  })
+}
+
+/** 管理员查询精选申请列表 */
+export async function getAdminFeaturedApplications(params: {
+  status?: string
+  pageNum?: number
+  pageSize?: number
+}) {
+  return request<API.BaseResponse<API.PageResponse<API.FeaturedApplication>>>('/app/admin/featured-applications', {
+    method: 'GET',
+    params,
+  })
+}
+
+/** 管理员审批精选申请 */
+export async function reviewFeaturedApplication(
+  applicationId: string,
+  approved: boolean,
+  adminRemark?: string,
+) {
+  return request<API.BaseResponse<boolean>>('/app/admin/featured-application/review', {
+    method: 'POST',
+    params: { applicationId, approved, adminRemark },
+  })
+}
+
+/** 管理员取消精选 */
+export async function cancelFeaturedApplication(appId: string) {
+  return request<API.BaseResponse<boolean>>('/app/admin/featured-application/cancel', {
+    method: 'POST',
+    params: { appId },
+  })
+}

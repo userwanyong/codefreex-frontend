@@ -107,7 +107,7 @@ const transactionTypeMap: Record<string, string> = {
 async function loadCreditTransactions(userId: string) {
   creditLoading.value = true
   try {
-    const res = await adminGetCreditTransactions(userId, 1, 10)
+    const res = await adminGetCreditTransactions(userId, 1, 9999)
     if (res.data?.code === 0 && res.data.data) {
       const data = parseResponseData<API.PageResponse<API.CreditTransaction>>(res.data.data)
       creditTransactions.value = data.records || []
@@ -211,8 +211,8 @@ onMounted(() => loadUsers())
       </a-table-column>
       <a-table-column title="状态" data-index="status" width="100">
         <template #default="{ record }">
-          <a-tag :color="statusMap[record.status]?.color || 'default'">
-            {{ statusMap[record.status]?.text || record.status }}
+          <a-tag :color="statusMap[record.status ?? '']?.color || 'default'">
+            {{ statusMap[record.status ?? '']?.text || record.status }}
           </a-tag>
         </template>
       </a-table-column>
@@ -269,7 +269,9 @@ onMounted(() => loadUsers())
       v-model:open="detailVisible"
       title="用户详情"
       :footer="null"
-      width="640px"
+      width="780px"
+      centered
+      :body-style="{ maxHeight: 'calc(100vh - 110px)', overflowY: 'auto' }"
     >
       <a-spin :spinning="detailLoading">
         <div v-if="detailUser" class="detail-content">
@@ -280,8 +282,8 @@ onMounted(() => loadUsers())
             </span>
             <div class="detail-basic">
               <h3>{{ detailUser.nickname || '未知用户' }}</h3>
-              <a-tag :color="statusMap[detailUser.status]?.color || 'default'">
-                {{ statusMap[detailUser.status]?.text || detailUser.status }}
+              <a-tag :color="statusMap[detailUser.status ?? '']?.color || 'default'">
+                {{ statusMap[detailUser.status ?? '']?.text || detailUser.status }}
               </a-tag>
             </div>
           </div>
@@ -304,34 +306,36 @@ onMounted(() => loadUsers())
             <a-descriptions-item label="注册时间">{{ formatDate(detailUser.createTime) }}</a-descriptions-item>
           </a-descriptions>
 
-          <a-divider>码点流水</a-divider>
-          <a-table
-            :data-source="creditTransactions"
-            :loading="creditLoading"
-            :pagination="false"
-            size="small"
-            row-key="id"
-          >
-            <a-table-column title="类型" data-index="type" width="90">
-              <template #default="{ record }">
-                <a-tag :color="record.type === 'consume' ? 'red' : record.type === 'recharge' ? 'green' : 'blue'">
-                  {{ transactionTypeMap[record.type] || record.type }}
-                </a-tag>
-              </template>
-            </a-table-column>
-            <a-table-column title="变动" data-index="amount" width="80">
-              <template #default="{ record }">
-                <span :style="{ color: record.amount > 0 ? '#52c41a' : '#ff4d4f' }">
-                  {{ record.amount > 0 ? '+' : '' }}{{ record.amount }}
-                </span>
-              </template>
-            </a-table-column>
-            <a-table-column title="余额" data-index="balanceAfter" width="80" />
-            <a-table-column title="描述" data-index="description" ellipsis />
-            <a-table-column title="时间" data-index="createTime" width="150">
-              <template #default="{ record }">{{ formatDate(record.createTime) }}</template>
-            </a-table-column>
-          </a-table>
+          <a-divider>码点流水（共 {{ creditTransactions.length }} 条）</a-divider>
+          <div class="credit-transactions-scroll">
+            <a-table
+              :data-source="creditTransactions"
+              :loading="creditLoading"
+              :pagination="false"
+              size="small"
+              row-key="id"
+            >
+              <a-table-column title="类型" data-index="type" width="90">
+                <template #default="{ record }">
+                  <a-tag :color="record.type === 'consume' ? 'red' : record.type === 'recharge' ? 'green' : 'blue'">
+                    {{ transactionTypeMap[record.type] || record.type }}
+                  </a-tag>
+                </template>
+              </a-table-column>
+              <a-table-column title="变动" data-index="amount" width="80">
+                <template #default="{ record }">
+                  <span :style="{ color: record.amount > 0 ? '#52c41a' : '#ff4d4f' }">
+                    {{ record.amount > 0 ? '+' : '' }}{{ record.amount }}
+                  </span>
+                </template>
+              </a-table-column>
+              <a-table-column title="余额" data-index="balanceAfter" width="80" />
+              <a-table-column title="描述" data-index="description" ellipsis />
+              <a-table-column title="时间" data-index="createTime" width="150">
+                <template #default="{ record }">{{ formatDate(record.createTime) }}</template>
+              </a-table-column>
+            </a-table>
+          </div>
         </div>
       </a-spin>
     </a-modal>
@@ -496,5 +500,11 @@ onMounted(() => loadUsers())
 
 .detail-descriptions {
   margin-top: 8px;
+}
+
+.credit-transactions-scroll {
+  max-height: calc(80vh - 380px);
+  min-height: 120px;
+  overflow-y: auto;
 }
 </style>

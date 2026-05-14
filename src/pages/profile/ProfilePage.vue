@@ -8,6 +8,7 @@ import {
   MailOutlined,
   CrownOutlined,
   GiftOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/userStore'
 import { getUserInfo, getMyCreditTransactions, uploadAvatar, updateProfile } from '@/api/userController'
@@ -16,7 +17,7 @@ import { parseResponseData } from '@/utils/response'
 
 const userStore = useUserStore()
 const userInfo = ref<API.UserInfo | null>(null)
-const inviter = ref<API.UserInfo | null>(null)
+const inviter = ref<API.InviteUser | null>(null)
 const loading = ref(true)
 const avatarUploading = ref(false)
 
@@ -38,10 +39,10 @@ async function loadData() {
   try {
     const [infoRes, inviterRes] = await Promise.all([getUserInfo(), getMyInviter()])
     if (infoRes.data?.code === 0 && infoRes.data.data) {
-      userInfo.value = JSON.parse(infoRes.data.data as unknown as string) as API.UserInfo
+      userInfo.value = parseResponseData<API.UserInfo>(infoRes.data.data)
     }
     if (inviterRes.data?.code === 0 && inviterRes.data.data) {
-      inviter.value = JSON.parse(inviterRes.data.data as unknown as string) as API.UserInfo
+      inviter.value = parseResponseData<API.InviteUser>(inviterRes.data.data)
     }
   } catch {
     // ignore
@@ -53,7 +54,7 @@ async function loadData() {
 async function loadCreditTransactions() {
   creditLoading.value = true
   try {
-    const res = await getMyCreditTransactions(1, 20)
+    const res = await getMyCreditTransactions(1, 50)
     if (res.data?.code === 0 && res.data.data) {
       const data = parseResponseData<API.PageResponse<API.CreditTransaction>>(res.data.data)
       creditTransactions.value = data.records || []
@@ -84,9 +85,13 @@ function triggerAvatarUpload() {
         if (userInfo.value) {
           userInfo.value = { ...userInfo.value, avatar: url }
         }
-        // 同步更新 userStore
+        // 同步更新 userStore（loginUser 已由后端 session 更新，前端也需同步）
         if (userStore.loginUser) {
           userStore.loginUser = { ...userStore.loginUser, avatar: url }
+        }
+        // 同时更新 userStore.userInfo
+        if (userStore.userInfo) {
+          userStore.userInfo = { ...userStore.userInfo, avatar: url }
         }
         message.success('头像更新成功')
       } else {
@@ -118,7 +123,6 @@ async function saveNickname() {
       if (userInfo.value) {
         userInfo.value = { ...userInfo.value, nickname: nicknameValue.value.trim() }
       }
-      // 同步更新 userStore
       if (userStore.loginUser) {
         userStore.loginUser = { ...userStore.loginUser, nickname: nicknameValue.value.trim() }
       }
@@ -144,7 +148,7 @@ function formatDate(dateStr?: string) {
 }
 
 function getAvatarUrl() {
-  return userInfo.value?.avatar || userStore.loginUser?.avatar
+  return userInfo.value?.avatar || userStore.loginUser?.avatar || userStore.avatar
 }
 
 onMounted(() => {
@@ -155,34 +159,30 @@ onMounted(() => {
 
 <template>
   <div class="profile-page">
-    <div class="page-header">
-      <h2>个人中心</h2>
-    </div>
-
     <a-spin :spinning="loading">
-      <!-- Profile Header Card -->
+      <!-- 合并的用户信息卡片 -->
       <div class="profile-header-card">
         <div class="avatar-section" @click="triggerAvatarUpload">
           <div class="avatar-wrapper">
-            <a-avatar :size="96" :src="getAvatarUrl()" class="profile-avatar">
+            <a-avatar :size="72" :src="getAvatarUrl()" class="profile-avatar">
               <template #icon><UserOutlined /></template>
             </a-avatar>
             <div class="avatar-overlay" :class="{ uploading: avatarUploading }">
-              <a-spin v-if="avatarUploading" :size="20" />
+              <a-spin v-if="avatarUploading" :size="16" />
               <template v-else>
                 <CameraOutlined class="overlay-icon" />
-                <span class="overlay-text">更换头像</span>
               </template>
             </div>
           </div>
         </div>
+
         <div class="profile-info">
           <div class="nickname-row">
             <template v-if="nicknameEditing">
               <a-input
                 v-model:value="nicknameValue"
                 :maxlength="32"
-                style="max-width: 200px"
+                style="max-width: 180px"
                 size="small"
                 @press-enter="saveNickname"
               />
@@ -200,12 +200,14 @@ onMounted(() => {
           </div>
           <div class="info-row">
             <CrownOutlined class="info-icon" />
-            <a-space v-if="userStore.roles.length">
+            <a-space v-if="userStore.roles.length" :size="4">
               <a-tag v-for="role in userStore.roles" :key="role" color="purple" size="small">{{ role }}</a-tag>
             </a-space>
             <span v-else>暂无角色</span>
           </div>
         </div>
+
+        <!-- 码点信息 -->
         <div class="credits-section">
           <div class="credits-card">
             <GiftOutlined class="credits-icon" />
@@ -215,62 +217,60 @@ onMounted(() => {
             </div>
           </div>
         </div>
+
+        <!-- 账户 & 邀请信息 -->
+        <div class="extra-info">
+          <div class="extra-item">
+            <span class="extra-label">累计码点</span>
+            <span class="extra-value">{{ userInfo?.totalCredits ?? 0 }}</span>
+          </div>
+          <div class="extra-item">
+            <span class="extra-label">注册时间</span>
+            <span class="extra-value">{{ formatDate(userInfo?.createTime).split(' ')[0] }}</span>
+          </div>
+          <div class="extra-item">
+            <span class="extra-label">邀请人</span>
+            <span class="extra-value">{{ inviter?.inviterId ? `用户 ${inviter.inviterId}` : '无' }}</span>
+          </div>
+        </div>
       </div>
 
-      <a-row :gutter="24" style="margin-top: 24px">
-        <a-col :xs="24" :md="12">
-          <a-card title="邀请信息" class="profile-card">
-            <a-descriptions :column="1" bordered size="small">
-              <a-descriptions-item label="邀请人">
-                {{ inviter?.userId || '无' }}
-              </a-descriptions-item>
-            </a-descriptions>
-          </a-card>
-        </a-col>
-
-        <a-col :xs="24" :md="12">
-          <a-card title="账户信息" class="profile-card">
-            <a-descriptions :column="1" bordered size="small">
-              <a-descriptions-item label="累计码点">
-                {{ userInfo?.totalCredits ?? 0 }}
-              </a-descriptions-item>
-              <a-descriptions-item label="注册时间">
-                {{ formatDate(userInfo?.createTime) }}
-              </a-descriptions-item>
-            </a-descriptions>
-          </a-card>
-        </a-col>
-      </a-row>
-
-      <a-card title="码点流水" class="profile-card" style="margin-top: 24px">
-        <a-table
-          :data-source="creditTransactions"
-          :loading="creditLoading"
-          :pagination="false"
-          size="small"
-          row-key="id"
-        >
-          <a-table-column title="类型" data-index="type" width="100">
-            <template #default="{ record }">
-              <a-tag :color="record.type === 'consume' ? 'red' : record.type === 'recharge' ? 'green' : 'blue'">
-                {{ transactionTypeMap[record.type] || record.type }}
-              </a-tag>
-            </template>
-          </a-table-column>
-          <a-table-column title="变动" data-index="amount" width="80">
-            <template #default="{ record }">
-              <span :style="{ color: record.amount > 0 ? '#52c41a' : '#ff4d4f' }">
-                {{ record.amount > 0 ? '+' : '' }}{{ record.amount }}
-              </span>
-            </template>
-          </a-table-column>
-          <a-table-column title="余额" data-index="balanceAfter" width="80" />
-          <a-table-column title="描述" data-index="description" ellipsis />
-          <a-table-column title="时间" width="160">
-            <template #default="{ record }">{{ formatDate(record.createTime) }}</template>
-          </a-table-column>
-        </a-table>
-      </a-card>
+      <!-- 码点流水 -->
+      <div class="credit-section">
+        <h3 class="section-title">
+          <ClockCircleOutlined /> 码点流水
+        </h3>
+        <div class="credit-table-wrapper">
+          <a-table
+            :data-source="creditTransactions"
+            :loading="creditLoading"
+            :pagination="false"
+            size="small"
+            row-key="id"
+            class="credit-table"
+          >
+            <a-table-column title="类型" data-index="type" width="90">
+              <template #default="{ record }">
+                <a-tag :color="record.type === 'consume' ? 'red' : record.type === 'recharge' ? 'green' : 'blue'" size="small">
+                  {{ transactionTypeMap[record.type] || record.type }}
+                </a-tag>
+              </template>
+            </a-table-column>
+            <a-table-column title="变动" data-index="amount" width="70">
+              <template #default="{ record }">
+                <span :style="{ color: record.amount > 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }">
+                  {{ record.amount > 0 ? '+' : '' }}{{ record.amount }}
+                </span>
+              </template>
+            </a-table-column>
+            <a-table-column title="余额" data-index="balanceAfter" width="70" />
+            <a-table-column title="描述" data-index="description" ellipsis />
+            <a-table-column title="时间" width="140">
+              <template #default="{ record }">{{ formatDate(record.createTime).split(' ')[0] + ' ' + formatDate(record.createTime).split(' ')[1]?.slice(0,5) }}</template>
+            </a-table-column>
+          </a-table>
+        </div>
+      </div>
     </a-spin>
   </div>
 </template>
@@ -279,27 +279,37 @@ onMounted(() => {
 .profile-page {
   max-width: 1100px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px - 48px);
+  overflow: hidden;
 }
 
-.page-header {
-  margin-bottom: 24px;
+/* 让 a-spin 内部容器也传递 flex 布局 */
+.profile-page :deep(.ant-spin-nested-loading) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  color: var(--text-primary);
+.profile-page :deep(.ant-spin-container) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Profile Header Card */
 .profile-header-card {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   background: var(--bg-surface);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  padding: 32px;
+  padding: 24px 28px;
+  flex-shrink: 0;
 }
 
 .avatar-section {
@@ -322,7 +332,6 @@ onMounted(() => {
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   opacity: 0;
@@ -341,13 +350,7 @@ onMounted(() => {
 
 .overlay-icon {
   color: white;
-  font-size: 20px;
-  margin-bottom: 4px;
-}
-
-.overlay-text {
-  color: white;
-  font-size: 12px;
+  font-size: 18px;
 }
 
 /* Profile Info */
@@ -360,11 +363,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .nickname {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -372,7 +375,7 @@ onMounted(() => {
 .edit-icon {
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .edit-icon:hover {
@@ -382,15 +385,15 @@ onMounted(() => {
 .info-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--text-secondary);
-  font-size: 14px;
-  margin-bottom: 4px;
+  font-size: 13px;
+  margin-bottom: 3px;
 }
 
 .info-icon {
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 /* Credits Section */
@@ -402,14 +405,14 @@ onMounted(() => {
   background: var(--bg-elevated);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  padding: 20px 28px;
+  padding: 16px 22px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .credits-icon {
-  font-size: 28px;
+  font-size: 24px;
   color: var(--accent);
 }
 
@@ -419,20 +422,87 @@ onMounted(() => {
 }
 
 .credits-value {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 800;
   color: var(--accent);
   line-height: 1.2;
 }
 
 .credits-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
   margin-top: 2px;
 }
 
-.profile-card {
-  margin-bottom: 24px;
+/* Extra Info */
+.extra-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 24px;
+  border-left: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.extra-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.extra-label {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.extra-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Credit Section */
+.credit-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.credit-table-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.credit-table-wrapper :deep(.ant-table) {
+  background: transparent;
+}
+
+.credit-table-wrapper :deep(.ant-table-thead > tr > th) {
+  background: var(--bg-elevated) !important;
+  font-size: 12px;
+  padding: 8px 12px !important;
+}
+
+.credit-table-wrapper :deep(.ant-table-tbody > tr > td) {
+  padding: 6px 12px !important;
+  font-size: 13px;
 }
 
 /* Responsive */
@@ -441,7 +511,7 @@ onMounted(() => {
     flex-direction: column;
     text-align: center;
     gap: 16px;
-    padding: 24px;
+    padding: 20px;
   }
 
   .profile-info {
@@ -456,6 +526,19 @@ onMounted(() => {
 
   .info-row {
     justify-content: center;
+  }
+
+  .extra-info {
+    border-left: none;
+    border-top: 1px solid var(--glass-border);
+    padding-left: 0;
+    padding-top: 12px;
+    align-items: center;
+  }
+
+  .profile-page {
+    height: auto;
+    overflow: auto;
   }
 }
 </style>
