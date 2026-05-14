@@ -313,7 +313,7 @@ declare namespace API {
     | 'imagePlanNode' | 'imageFetchNode' | 'promptEnhanceNode'
     | 'routeNode' | 'codeGenNode' | 'buildNode' | 'qualityCheckNode' | 'persistNode'
 
-  type WorkflowEventType = 'tool_request' | 'tool_executed' | 'ai_response' | 'done' | 'error'
+  type WorkflowEventType = 'tool_request' | 'tool_executed' | 'ai_r' | 'done' | 'error'
 
   type WorkflowEvent = {
     type: WorkflowEventType
@@ -332,5 +332,6 @@ declare namespace API {
     retryCount: number
     message: string | null
     updateTime: string
+    cachedEventCount: number
   }
 }

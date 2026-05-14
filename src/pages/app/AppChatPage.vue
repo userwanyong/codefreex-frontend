@@ -17,8 +17,9 @@ import {
 import { message, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores/userStore'
 import { getApp, deployApp, cancelDeploy, downloadApp, getAppCode } from '@/api/appController'
-import { streamWorkflowGenerate, getChatHistory } from '@/api/aiController'
+import { streamWorkflowGenerate, getChatHistory, getWorkflowStatus, reconnectWorkflow } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
+import { parseCodeFiles } from '@/utils/codeFileParser'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CodeFilesPanel from '@/components/CodeFilesPanel.vue'
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
@@ -60,6 +61,7 @@ const sending = ref(false)
 const chatEndRef = ref<HTMLElement | null>(null)
 const messagesAreaRef = ref<HTMLElement | null>(null)
 let currentAbortController: AbortController | null = null
+let reconnecting = false
 let msgIdCounter = 0
 let hasAutoSent = false
 let historyCursor = ''
@@ -132,9 +134,13 @@ const rightView = ref<'code' | 'preview'>('code')
 
 // Get the latest code content for the right panel
 const currentAIContent = computed(() => {
-  // 流式生成中：优先展示实时流式内容
-  if (sending.value) return codeContent.value || fileCodeContent.value || ''
   // 生成完成后：优先使用 API 返回的磁盘文件内容（更准确）
+  if (!sending.value) return fileCodeContent.value || codeContent.value || ''
+  // 流式生成中：如果 codeContent 能解析出文件，优先用它（正常流式或完整回放）
+  // 否则 fallback 到磁盘文件（回放不完整时，codeContent 缺少代码块开头标记）
+  if (codeContent.value && parseCodeFiles(codeContent.value).length > 0) {
+    return codeContent.value
+  }
   return fileCodeContent.value || codeContent.value || ''
 })
 
@@ -146,6 +152,288 @@ const statusLabel = computed(() => {
   const map: Record<string, string> = { generated: '已生成', draft: '草稿', deployed: '已部署', disabled: '已禁用' }
   return map[appStatus.value] || ''
 })
+
+// 尝试重连正在运行的工作流（页面刷新后调用）
+async function tryReconnect() {
+  // 防止并发调用
+  if (reconnecting) return
+  reconnecting = true
+  // 中止旧的重连 SSE 连接，确保同一时刻只有一个
+  if (currentAbortController) {
+    currentAbortController.abort()
+    currentAbortController = null
+  }
+  try {
+    const res = await getWorkflowStatus(appId.value)
+    if (res.data?.code !== 0 || !res.data.data) return
+    const status = res.data.data
+    if (status.status !== 'running') return
+
+    console.log('[Reconnect] 检测到运行中的工作流，开始重连 appId=', appId.value)
+
+    // 设置发送状态
+    sending.value = true
+    currentNode.value = status.currentNode as API.WorkflowNode || null
+    retryCount.value = status.retryCount || 0
+    codeContent.value = ''
+    rightView.value = 'code'
+
+    // 复用已有的最后一条 AI 消息，避免与历史记录重复显示
+    let statusMsg: ChatMsg | null = null
+    for (let i = messages.value.length - 1; i >= 0; i--) {
+      if (messages.value[i].role === 'ai') {
+        statusMsg = messages.value[i]
+        break
+      }
+    }
+    if (!statusMsg) {
+      statusMsg = addMessage('ai', '', 'streaming')
+    } else {
+      // 清空已有消息的状态，准备从回放重建
+      statusMsg.status = 'streaming'
+      statusMsg.statusItems = []
+      statusMsg.content = ''
+    }
+    const statusMsgId = statusMsg.id
+    const statusItems: StatusItem[] = []
+    let codeStatusAdded = false
+    let isChatMode = false
+    let isVisualEditMode = false
+    let chatMsgCreated = false
+    let chatMsgId = ''
+    let buffer = ''
+    let rafId = 0
+
+    function flushBufferChat() {
+      const target = messages.value.find((m) => m.id === chatMsgId)
+      if (target && buffer) { target.content += buffer; buffer = '' }
+      scrollToBottom()
+      rafId = 0
+    }
+
+    function syncStatus() {
+      const target = messages.value.find((m) => m.id === statusMsgId)
+      if (target) {
+        target.statusItems = [...statusItems]
+      }
+      scrollToBottom()
+    }
+
+    currentAbortController = reconnectWorkflow(appId.value, {
+      onMessage(event) {
+        // 复用 sendToAI 中相同的事件处理逻辑
+        if (event.type === 'tool_request') {
+          const data = event.data as { node?: string } | undefined
+          if (data?.node) {
+            if (data.node === 'codeGenNode' && currentNode.value === 'qualityCheckNode') {
+              retryCount.value += 1
+            }
+            currentNode.value = data.node as API.WorkflowNode
+
+            if (data.node !== 'chatDirectNode') {
+              const cfg = NODE_LABELS[data.node]
+              if (cfg) {
+                const old = statusItems.findIndex(it => it.nodeKey === data.node)
+                if (old >= 0) statusItems.splice(old, 1)
+                statusItems.push({ icon: cfg.icon, label: cfg.label, status: 'running', nodeKey: data.node })
+
+                if (data.node === 'buildNode') {
+                  const cwIdx = statusItems.findIndex(it => it.nodeKey === 'codeWriting')
+                  if (cwIdx >= 0) {
+                    statusItems[cwIdx] = { icon: '💻', label: '编写代码', status: 'done', detail: '已完成' }
+                  }
+                  const veIdx = statusItems.findIndex(it => it.nodeKey === 'visualEditNode')
+                  if (veIdx >= 0) {
+                    statusItems[veIdx] = { icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' }
+                  }
+                }
+
+                syncStatus()
+              }
+            }
+          }
+        }
+
+        if (event.type === 'tool_executed') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const eventData = event.data as { node?: string; message?: string; data?: Record<string, any> } | undefined
+          const node = eventData?.node
+          const msg = eventData?.message
+          const nodeData = eventData?.data
+
+          if (node) {
+            // 移除该节点的 "running" 项
+            const runIdx = statusItems.findIndex(it => it.nodeKey === node)
+            if (runIdx >= 0) statusItems.splice(runIdx, 1)
+
+            if (node === 'intentClassifyNode' && msg) {
+              const isCoding = msg.includes('编码')
+              const isVisualEdit = msg.includes('可视化编辑')
+              const isChat = !isCoding && !isVisualEdit
+              statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : isVisualEdit ? '可视化编辑' : '普通对话' })
+              if (isChat) isChatMode = true
+              if (isVisualEdit) isVisualEditMode = true
+              if (isVisualEdit) {
+                const veCfg = NODE_LABELS['visualEditNode']
+                if (veCfg) statusItems.push({ icon: veCfg.icon, label: veCfg.label, status: 'running', nodeKey: 'visualEditNode' })
+                syncStatus()
+              }
+              if (isCoding) {
+                const prdCfg = NODE_LABELS['prdGenNode']
+                if (prdCfg) statusItems.push({ icon: prdCfg.icon, label: prdCfg.label, status: 'running', nodeKey: 'prdGenNode' })
+                syncStatus()
+              }
+            } else if (node === 'chatDirectNode') {
+              // 对话模式不添加状态项
+            } else if (node === 'visualEditNode') {
+              const buildIdx = statusItems.findIndex(it => it.nodeKey === 'buildNode')
+              const veDoneItem: StatusItem = { icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' }
+              if (buildIdx >= 0) statusItems.splice(buildIdx, 0, veDoneItem)
+              else statusItems.push(veDoneItem)
+              if (!isChatMode) {
+                const qcCfg = NODE_LABELS['qualityCheckNode']
+                if (qcCfg) statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+              }
+            } else if (node === 'prdGenNode' && msg) {
+              prdContent.value = msg
+              statusItems.push({ icon: '📋', label: '生成需求文档', status: 'done', detail: 'PRD.md', downloadAction: 'prd' })
+            } else if (node === 'routeNode' && msg) {
+              statusItems.push({ icon: '🎯', label: '确定生成方案', status: 'done', detail: msg.replace('Route: ', '') })
+            } else if (node === 'promptReviewNode' && msg) {
+              const passed = msg.toLowerCase().includes('passed')
+              statusItems.push({ icon: '🛡️', label: '检查内容安全性', status: passed ? 'done' : 'error', detail: passed ? '通过' : '未通过' })
+            } else if (node === 'imagePlanNode') {
+              statusItems.push({ icon: '🖼️', label: '规划图片资源', status: 'done', detail: '已完成' })
+            } else if (node === 'imageFetchNode') {
+              statusItems.push({ icon: '🖼️', label: '获取图片素材', status: 'done', detail: '已完成' })
+            } else if (node === 'promptEnhanceNode') {
+              statusItems.push({ icon: '✨', label: '优化提示词', status: 'done', detail: '已完成' })
+            } else if (node === 'persistNode') {
+              statusItems.push({ icon: '✅', label: '生成完成', status: 'done', detail: '已完成' })
+            } else if (node === 'buildNode') {
+              const step = nodeData?.step
+              const isDone = nodeData?.result === 'success'
+              const buildItem = { icon: '📦', label: '项目构建', status: (isDone ? 'done' : 'running') as StatusItem['status'], detail: isDone ? '构建完成' : step === 'npm_build' ? '打包中...' : step === 'npm_install' ? '安装依赖...' : '构建中...', nodeKey: 'buildNode' }
+              const qcIdx = statusItems.findIndex(it => it.nodeKey === 'qualityCheckNode')
+              if (qcIdx >= 0) statusItems.splice(qcIdx, 0, buildItem)
+              else statusItems.push(buildItem)
+            } else if (node === 'qualityCheckNode') {
+              const passed = nodeData?.pass ?? (nodeData?.reason?.toLowerCase()?.includes('ok'))
+              statusItems.push({ icon: '🔍', label: '代码质量检查', status: passed ? 'done' : 'warning', detail: passed ? '通过' : nodeData?.reason || '未通过' })
+              if (!isChatMode) {
+                if (passed) {
+                  statusItems.push({ icon: '✅', label: isVisualEditMode ? '修改完成' : '生成完成', status: 'done', detail: '已完成' })
+                } else {
+                  const fixCfg = NODE_LABELS['codeFixNode']
+                  if (fixCfg) statusItems.push({ icon: fixCfg.icon, label: fixCfg.label, status: 'running', nodeKey: 'codeFixNode' })
+                }
+              }
+            } else if (node === 'codeFixNode') {
+              statusItems.push({ icon: '🔧', label: '修复代码', status: 'done', detail: '已完成' })
+              if (!isChatMode) {
+                const qcCfg = NODE_LABELS['qualityCheckNode']
+                if (qcCfg) statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+              }
+            } else if (node === 'failNode') {
+              statusItems.push({ icon: '❌', label: '生成失败', status: 'error', detail: nodeData?.reason || '质量检查未通过' })
+            }
+
+            // 预显示下一个节点
+            const nextNodeKey = NEXT_NODE[node]
+            if (nextNodeKey && !isChatMode) {
+              const nextCfg = NODE_LABELS[nextNodeKey]
+              if (nextCfg) statusItems.push({ icon: nextCfg.icon, label: nextCfg.label, status: 'running', nodeKey: nextNodeKey })
+            }
+            syncStatus()
+          }
+        }
+
+        if (event.type === 'ai_r' && typeof event.data === 'string') {
+          if (isChatMode) {
+            // 对话模式：文本写入新气泡
+            if (!chatMsgCreated) {
+              chatMsgCreated = true
+              const statusTarget = messages.value.find((m) => m.id === statusMsgId)
+              if (statusTarget) statusTarget.status = 'done'
+              const chatMsg = addMessage('ai', '', 'streaming')
+              chatMsgId = chatMsg.id
+            }
+            buffer += event.data
+            if (!rafId) rafId = requestAnimationFrame(flushBufferChat)
+          } else {
+            // 编码模式：写入右侧代码面板
+            codeContent.value += event.data
+            if (!codeStatusAdded) {
+              codeStatusAdded = true
+              const cgIdx = statusItems.findIndex(it => it.nodeKey === 'codeGenNode')
+              if (cgIdx >= 0) statusItems.splice(cgIdx, 1)
+              if (!isVisualEditMode) {
+                statusItems.push({ icon: '💻', label: '编写代码', status: 'running', nodeKey: 'codeWriting' })
+                syncStatus()
+              }
+            }
+            scrollToBottom()
+          }
+        }
+      },
+      onDone() {
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
+
+        if (isChatMode) {
+          const statusTarget = messages.value.find((m) => m.id === statusMsgId)
+          if (statusTarget) statusTarget.status = 'done'
+          if (chatMsgCreated) {
+            const chatTarget = messages.value.find((m) => m.id === chatMsgId)
+            if (chatTarget && buffer) { chatTarget.content += buffer; buffer = '' }
+            if (chatTarget) chatTarget.status = 'done'
+          }
+        } else {
+          const target = messages.value.find((m) => m.id === statusMsgId)
+          if (target && buffer) { target.content += buffer; buffer = '' }
+          const codeIdx = statusItems.findIndex(it => it.nodeKey === 'codeWriting')
+          if (codeIdx >= 0) {
+            statusItems[codeIdx] = { icon: '💻', label: '编写代码', status: 'done', detail: '已完成' }
+          }
+          if (target) {
+            target.statusItems = [...statusItems]
+            target.status = 'done'
+          }
+          refreshPreview()
+          if (codeContent.value) rightView.value = 'preview'
+        }
+
+        sending.value = false
+        currentNode.value = null
+        currentAbortController = null
+        appStatus.value = 'generated'
+        loadAppCode()
+        refreshAppInfo()
+        scrollToBottom()
+        useUserStore().fetchUserInfo()
+      },
+      onError(_err) {
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
+
+        const target = messages.value.find((m) => m.id === statusMsgId)
+        if (target && buffer) { target.content += buffer; buffer = '' }
+        statusItems.forEach(it => { if (it.status === 'running') it.status = 'error' })
+        statusItems.push({ icon: '❌', label: '重连失败，请重新生成', status: 'error' })
+        if (target) {
+          target.statusItems = [...statusItems]
+          target.status = 'error'
+        }
+
+        sending.value = false
+        currentNode.value = null
+        currentAbortController = null
+      },
+    })
+  } catch (e) {
+    console.error('[Reconnect] 重连失败:', e)
+  } finally {
+    reconnecting = false
+  }
+}
 
 // Load app info
 async function loadApp() {
@@ -164,6 +452,11 @@ async function loadApp() {
 
       // 从文件 API 加载代码内容
       await loadAppCode()
+
+      // 检查是否有正在运行的工作流需要重连
+      if (!hasAutoSent) {
+        await tryReconnect()
+      }
 
       // 仅在无历史记录且有 prompt 参数时自动发送
       if (!messages.value.length && initialPrompt.value && !hasAutoSent) {
@@ -191,7 +484,8 @@ async function loadAppCode() {
     const res = await getAppCode(appId.value)
     if (res.data?.code === 0 && res.data.data) {
       fileCodeContent.value = res.data.data
-      if (fileCodeContent.value) rightView.value = 'preview'
+      // 只有不在流式生成中时才切到预览
+      if (fileCodeContent.value && !sending.value) rightView.value = 'preview'
     }
   } catch { /* ignore */ }
 }
@@ -554,8 +848,8 @@ async function sendToAI(text: string) {
         }
       }
 
-      // ai_response：流式输出
-      if (event.type === 'ai_response' && typeof event.data === 'string') {
+      // ai_r：流式输出
+      if (event.type === 'ai_r' && typeof event.data === 'string') {
         if (isChatMode) {
           // 对话模式：状态项保留在第一个气泡，文本写入新气泡
           if (!chatMsgCreated) {

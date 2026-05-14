@@ -121,6 +121,13 @@ onMounted(() => loadApps())
           </a-tag>
         </template>
       </a-table-column>
+      <a-table-column title="公开状态" width="100">
+        <template #default="{ record }">
+          <a-tag :color="record.isPublic ? 'green' : 'default'">
+            {{ record.isPublic ? '公开' : '私有' }}
+          </a-tag>
+        </template>
+      </a-table-column>
       <a-table-column title="作者ID" data-index="userId" width="140" ellipsis />
       <a-table-column title="浏览" data-index="viewCount" width="80" />
       <a-table-column title="点赞" data-index="likeCount" width="80" />

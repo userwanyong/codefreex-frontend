@@ -166,6 +166,16 @@ function getIconColor(name: string): string {
   }
   return colorMap[ext] || '#94a3b8'
 }
+
+function getFileExtLabel(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  const map: Record<string, string> = {
+    html: 'html', htm: 'html', css: 'css', js: 'js', ts: 'ts',
+    jsx: 'jsx', tsx: 'tsx', vue: 'vue', json: 'json', md: 'md',
+    py: 'py', java: 'java', xml: 'xml', svg: 'svg', sh: 'sh',
+  }
+  return map[ext] || ext || 'file'
+}
 </script>
 
 <template>
@@ -199,11 +209,17 @@ function getIconColor(name: string): string {
             />
             <span
               v-if="!item.node.isDir"
-              class="file-dot"
-              :style="{ background: getIconColor(item.node.name) }"
-            />
+              class="file-type-icon"
+              :style="{ color: getIconColor(item.node.name) }"
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none">
+                <path d="M3 1.5h6.5L12.5 5v9.5H3z" fill="currentColor" opacity="0.15" />
+                <path d="M3 1.5h6.5L12.5 5v9.5H3z" stroke="currentColor" stroke-width="1" stroke-linejoin="round" />
+                <path d="M9.5 1.5V5h3" stroke="currentColor" stroke-width="1" stroke-linejoin="round" />
+              </svg>
+            </span>
             <span class="node-name">{{ item.node.name }}</span>
-            <LoadingOutlined v-if="item.node.file?.streaming" class="streaming-indicator" />
+            <span v-if="item.node.file?.streaming" class="streaming-dot" />
           </div>
         </template>
         <div v-else class="tree-empty">
@@ -218,10 +234,16 @@ function getIconColor(name: string): string {
       <div v-if="currentFile" class="code-viewer-inner">
         <div class="code-viewer-header">
           <div class="header-left">
-            <span class="file-dot" :style="{ background: getIconColor(currentFile.name) }" />
+            <span class="file-type-icon" :style="{ color: getIconColor(currentFile.name) }">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none">
+                <path d="M3 1.5h6.5L12.5 5v9.5H3z" fill="currentColor" opacity="0.15" />
+                <path d="M3 1.5h6.5L12.5 5v9.5H3z" stroke="currentColor" stroke-width="1" stroke-linejoin="round" />
+                <path d="M9.5 1.5V5h3" stroke="currentColor" stroke-width="1" stroke-linejoin="round" />
+              </svg>
+            </span>
             <span class="file-path">{{ currentFile.path }}</span>
             <span class="file-lang">{{ currentFile.language }}</span>
-            <LoadingOutlined v-if="currentFile.streaming" class="header-streaming" />
+            <span v-if="currentFile.streaming" class="header-streaming-dot" />
           </div>
           <div class="header-right">
             <span class="line-count">{{ currentFile.content.split('\n').length }} 行</span>
@@ -323,12 +345,13 @@ function getIconColor(name: string): string {
   flex-shrink: 0;
 }
 
-.file-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.file-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-  margin: 0 2px;
 }
 
 .node-name {
@@ -338,16 +361,18 @@ function getIconColor(name: string): string {
   white-space: nowrap;
 }
 
-.streaming-indicator {
-  font-size: 11px;
-  color: var(--accent);
-  animation: blink 1s infinite;
+.streaming-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
   flex-shrink: 0;
+  animation: pulse-dot 1.2s ease-in-out infinite;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
 
 .tree-empty {
@@ -413,10 +438,13 @@ function getIconColor(name: string): string {
   flex-shrink: 0;
 }
 
-.header-streaming {
-  font-size: 12px;
-  color: var(--accent);
-  animation: blink 1s infinite;
+.header-streaming-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+  animation: pulse-dot 1.2s ease-in-out infinite;
 }
 
 .header-right {

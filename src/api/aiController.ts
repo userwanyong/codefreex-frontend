@@ -1,5 +1,5 @@
 import request from '@/request'
-import { createSSEConnection, createPostSSEConnection } from '@/utils/sse'
+import { createSSEConnection, createPostSSEConnection, createGetSSEConnection } from '@/utils/sse'
 
 /** 获取应用聊天历史 */
 export async function getChatHistory(appId: string, cursor?: string) {
@@ -71,5 +71,27 @@ export async function getWorkflowStatus(appId: string) {
     method: 'GET',
     params: { appId },
   })
+}
+
+/** SSE 断线重连（GET方式，回放缓存事件 + 实时订阅） */
+export function reconnectWorkflow(
+  appId: string,
+  callbacks: {
+    onMessage: (event: API.WorkflowEvent) => void
+    onDone: () => void
+    onError: (error: unknown) => void
+  },
+): AbortController {
+  return createGetSSEConnection(
+    '/ai/workflow/reconnect',
+    { appId },
+    {
+      onMessage(event) {
+        callbacks.onMessage(event as API.WorkflowEvent)
+      },
+      onDone: callbacks.onDone,
+      onError: callbacks.onError,
+    },
+  )
 }
 
