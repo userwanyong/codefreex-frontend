@@ -125,6 +125,11 @@ const router = createRouter({
           name: 'admintags',
           component: () => import('@/pages/admin/AdminTagPage.vue'),
         },
+        {
+          path: 'usage',
+          name: 'adminusage',
+          component: () => import('@/pages/admin/AdminUsagePage.vue'),
+        },
       ],
     },
 

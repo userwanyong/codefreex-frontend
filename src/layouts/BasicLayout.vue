@@ -44,6 +44,7 @@ const adminItems = [
   { key: 'adminusers', label: '用户管理', path: '/admin/user' },
   { key: 'adminapps', label: '应用管理', path: '/admin/app' },
   { key: 'admintags', label: '标签管理', path: '/admin/tags' },
+  { key: 'adminusage', label: '用量统计', path: '/admin/usage' },
   { key: 'admininvites', label: '邀请码管理', path: '/admin/invites' },
   { key: 'adminredeems', label: '兑换码管理', path: '/admin/redeem' },
 ]

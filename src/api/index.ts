@@ -5,6 +5,7 @@ import * as aiController from './aiController'
 import * as inviteController from './inviteController'
 import * as redeemController from './redeemController'
 import * as userController from './userController'
+import * as usageController from './usageController'
 
 export default {
   healthController,
@@ -14,4 +15,5 @@ export default {
   inviteController,
   redeemController,
   userController,
+  usageController,
 }
