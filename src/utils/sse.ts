@@ -139,6 +139,16 @@ export function createPostSSEConnection(
           window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`
           return
         }
+        if (response.status === 429) {
+          const text = await response.text().catch(() => '')
+          let errorMsg = '请求过于频繁，请稍后再试'
+          try {
+            const json = JSON.parse(text) as { message?: string }
+            if (json.message) errorMsg = json.message
+          } catch { /* use default */ }
+          callbacks.onError(errorMsg)
+          return
+        }
         const text = await response.text().catch(() => '')
         callbacks.onError(text || `HTTP ${response.status}`)
         return
@@ -260,6 +270,16 @@ export function createGetSSEConnection(
         if (response.status === 401) {
           localStorage.removeItem('codefreex_token')
           window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`
+          return
+        }
+        if (response.status === 429) {
+          const text = await response.text().catch(() => '')
+          let errorMsg = '请求过于频繁，请稍后再试'
+          try {
+            const json = JSON.parse(text) as { message?: string }
+            if (json.message) errorMsg = json.message
+          } catch { /* use default */ }
+          callbacks.onError(errorMsg)
           return
         }
         const text = await response.text().catch(() => '')

@@ -35,6 +35,10 @@ myAxios.interceptors.response.use(
       }
     }
     // 40101 无权限错误由各组件自行处理，避免重复弹窗
+    // 42900 限流错误由各组件自行处理（SSE 场景通过 429 状态码处理）
+    if (data.code === 42900) {
+      message.warning(data.message || '请求过于频繁，请稍后再试')
+    }
     return response
   },
   (error) => {

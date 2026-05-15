@@ -159,7 +159,12 @@ async function handleCreateApp() {
         query: { prompt: promptText.value.trim() },
       })
     } else {
-      message.error(res.data?.message || '创建失败')
+      const errMsg = res.data?.message || '创建失败'
+      if (errMsg.includes('请求过于频繁')) {
+        message.warning(errMsg)
+      } else {
+        message.error(errMsg)
+      }
     }
   } catch {
     message.error('创建失败，请检查网络')

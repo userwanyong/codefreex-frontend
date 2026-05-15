@@ -411,8 +411,20 @@ async function tryReconnect() {
         scrollToBottom()
         useUserStore().fetchUserInfo()
       },
-      onError(_err) {
+      onError(err) {
         if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
+
+        // 限流错误：显示友好提示
+        const errText = typeof err === 'string' ? err : ''
+        if (errText.includes('请求过于频繁')) {
+          message.warning(errText)
+          const target = messages.value.find((m) => m.id === statusMsgId)
+          if (target) target.status = 'done'
+          sending.value = false
+          currentNode.value = null
+          currentAbortController = null
+          return
+        }
 
         const target = messages.value.find((m) => m.id === statusMsgId)
         if (target && buffer) { target.content += buffer; buffer = '' }
@@ -923,8 +935,20 @@ async function sendToAI(text: string) {
       useUserStore().fetchUserInfo()
     },
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onError(_err) {
+    onError(err) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
+
+      // 限流错误：显示友好提示，不显示"生成失败"状态
+      const errText = typeof err === 'string' ? err : ''
+      if (errText.includes('请求过于频繁')) {
+        message.warning(errText)
+        const target = messages.value.find((m) => m.id === statusMsgId)
+        if (target) target.status = 'done'
+        sending.value = false
+        currentNode.value = null
+        currentAbortController = null
+        return
+      }
 
       if (isChatMode) {
         // 对话模式：状态消息保持不变，文本消息标记错误
