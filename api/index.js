@@ -10,10 +10,25 @@ export default async function handler(req, res) {
       }
     }
 
+    // 根据请求类型正确序列化 body
+    let body = undefined
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+      const ct = (req.headers['content-type'] || '').toLowerCase()
+      if (typeof req.body === 'string') {
+        body = req.body
+      } else if (ct.includes('application/json')) {
+        body = JSON.stringify(req.body)
+      } else if (ct.includes('application/x-www-form-urlencoded')) {
+        body = new URLSearchParams(req.body).toString()
+      } else {
+        body = JSON.stringify(req.body)
+      }
+    }
+
     const response = await fetch(targetUrl, {
       method: req.method,
       headers,
-      body: req.method !== 'GET' && req.method !== 'HEAD' && req.body ? JSON.stringify(req.body) : undefined,
+      body,
       redirect: 'manual',
     })
 
