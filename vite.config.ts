@@ -3,7 +3,8 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
-import { apiConfig } from './config/api'
+const apiBaseURL = process.env.VITE_API_BASE_URL || '/api'
+const proxyTarget = 'http://localhost:8123'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,8 +14,8 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      [apiConfig.baseURL]: {
-        target: apiConfig.proxyTarget,
+      [apiBaseURL]: {
+        target: proxyTarget,
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes, _req, res) => {
