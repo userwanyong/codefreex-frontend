@@ -1,3 +1,8 @@
+// 禁用 Vercel body 解析，直接转发原始字节流
+export const config = {
+  api: { bodyParser: false },
+}
+
 export default async function handler(req, res) {
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:8123'
   const targetUrl = `${backendUrl}${req.url}`
@@ -5,30 +10,25 @@ export default async function handler(req, res) {
   try {
     const headers = {}
     for (const [key, value] of Object.entries(req.headers)) {
-      if (key.toLowerCase() !== 'host' && key.toLowerCase() !== 'content-length') {
+      if (key.toLowerCase() !== 'host') {
         headers[key] = Array.isArray(value) ? value[0] : value || ''
       }
     }
 
-    // 根据请求类型正确序列化 body
-    let body = undefined
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
-      const ct = (req.headers['content-type'] || '').toLowerCase()
-      if (typeof req.body === 'string') {
-        body = req.body
-      } else if (ct.includes('application/json')) {
-        body = JSON.stringify(req.body)
-      } else if (ct.includes('application/x-www-form-urlencoded')) {
-        body = new URLSearchParams(req.body).toString()
-      } else {
-        body = JSON.stringify(req.body)
+    // 读取原始 body（支持 JSON / form-urlencoded / multipart / binary）
+    let rawBody = undefined
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const chunks = []
+      for await (const chunk of req) {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
       }
+      if (chunks.length) rawBody = Buffer.concat(chunks)
     }
 
     const response = await fetch(targetUrl, {
       method: req.method,
       headers,
-      body,
+      body: rawBody,
       redirect: 'manual',
     })
 
