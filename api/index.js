@@ -1,11 +1,9 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:8123'
   const targetUrl = `${backendUrl}${req.url}`
 
   try {
-    const headers: Record<string, string> = {}
+    const headers = {}
     for (const [key, value] of Object.entries(req.headers)) {
       if (key.toLowerCase() !== 'host' && key.toLowerCase() !== 'content-length') {
         headers[key] = Array.isArray(value) ? value[0] : value || ''
@@ -47,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     })
     res.status(response.status).send(data)
-  } catch (error: any) {
+  } catch (error) {
     console.error('Proxy error:', error)
     res.status(502).json({ error: true, message: error.message })
   }
