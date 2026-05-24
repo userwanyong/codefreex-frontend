@@ -1301,6 +1301,7 @@ async function handleDownload() {
 }
 
 onMounted(() => {
+  if (!appId.value) return
   loadApp()
   window.addEventListener('message', handleIframeClick)
 })

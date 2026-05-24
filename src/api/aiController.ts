@@ -3,6 +3,7 @@ import { createSSEConnection, createPostSSEConnection, createGetSSEConnection } 
 
 /** 获取应用聊天历史 */
 export async function getChatHistory(appId: string, cursor?: string) {
+  if (!appId) throw new Error('appId is required')
   return request<API.BaseResponse<{ records?: API.ChatHistoryItem[]; nextCursor?: string; hasNext?: boolean }>>('/chat/history/list', {
     method: 'GET',
     params: { appId, cursor: cursor || undefined },
@@ -67,6 +68,7 @@ export function streamWorkflowGenerate(
 
 /** 查询工作流状态 */
 export async function getWorkflowStatus(appId: string) {
+  if (!appId) throw new Error('appId is required')
   return request<API.BaseResponse<API.WorkflowStatusResponse>>('/ai/workflow/status', {
     method: 'GET',
     params: { appId },

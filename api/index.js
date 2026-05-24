@@ -53,13 +53,14 @@ export default async function handler(req, res) {
       return
     }
 
-    const data = await response.text()
+    const buf = Buffer.from(await response.arrayBuffer())
     response.headers.forEach((value, key) => {
-      if (key.toLowerCase() !== 'transfer-encoding') {
+      if (key.toLowerCase() !== 'transfer-encoding' && key.toLowerCase() !== 'content-length') {
         res.setHeader(key, value)
       }
     })
-    res.status(response.status).send(data)
+    res.setHeader('Content-Length', buf.length)
+    res.status(response.status).end(buf)
   } catch (error) {
     console.error('Proxy error:', error)
     res.status(502).json({ error: true, message: error.message })
