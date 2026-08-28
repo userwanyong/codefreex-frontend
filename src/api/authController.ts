@@ -1,76 +1,77 @@
 import request from '@/request'
 
-/** 发送邮箱验证码 */
-export async function sendEmailCode(email: string) {
-  return request<API.BaseResponse<boolean>>('/auth/email/code', {
-    method: 'POST',
-    data: { email },
+/** 查询当前开放的登录方式（管理端开闭实时同步），如 ['password', 'email:smtp', 'oauth:gitee'] */
+export async function getLoginMethods() {
+  return request<API.BaseResponse<string[]>>('/auth/login/methods', {
+    method: 'GET',
   })
 }
 
-/** 邮箱注册 */
-export async function register(body: {
-  email: string
-  emailCode: string
-  password: string
-  inviteCode: string
+/** 账号密码登录（用户名或邮箱） */
+export async function loginByPassword(username: string, password: string) {
+  return request<API.BaseResponse<API.TokenResponse>>('/auth/login/password', {
+    method: 'POST',
+    data: { username, password },
+  })
+}
+
+/** 发送登录验证码（邮箱/短信） */
+export async function sendLoginCode(method: string, target: string) {
+  return request<API.BaseResponse<boolean>>('/auth/send-code', {
+    method: 'POST',
+    data: { method, target },
+  })
+}
+
+/** 验证码登录（新用户自动注册，需邀请码） */
+export async function loginByCode(body: {
+  method: string
+  target: string
+  code: string
+  inviteCode?: string
 }) {
+  return request<API.BaseResponse<API.TokenResponse>>('/auth/login/code', {
+    method: 'POST',
+    data: body,
+  })
+}
+
+/** 邮箱注册（密码 + 邀请码） */
+export async function register(body: { email: string; password: string; inviteCode: string }) {
   return request<API.BaseResponse<API.TokenResponse>>('/auth/register', {
     method: 'POST',
     data: body,
   })
 }
 
-/** 邮箱登录 */
-export async function loginByEmail(email: string, password: string) {
-  const body = new URLSearchParams()
-  body.set('email', email)
-  body.set('password', password)
-
-  return request<API.BaseResponse<API.TokenResponse>>('/auth/login/email', {
-    method: 'POST',
-    data: body,
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+/** 获取 OAuth 授权页地址（跳转发起授权） */
+export async function getOAuthAuthorizeUrl(provider: string) {
+  return request<API.BaseResponse<string>>(`/auth/oauth/${provider}/authorize`, {
+    method: 'GET',
   })
 }
 
-/** 生成微信扫码登录二维码 */
-export async function generateWechatQrCode() {
-  return request<API.BaseResponse<API.WechatQrCodeResponse>>('/auth/wechat/qrcode/generate', {
-    method: 'POST',
-  })
-}
-
-/** 轮询微信扫码状态 */
-export async function pollWechatQrCodeStatus(qrcodeId: string) {
-  return request<API.BaseResponse<API.WechatQrCodeResponse>>('/auth/wechat/qrcode/status', {
-    method: 'POST',
-    data: { qrcodeId },
-  })
-}
-
-/** 微信扫码登录 */
-export async function wechatQrCodeLogin(ticket: string) {
-  return request<API.BaseResponse<API.WechatLoginResponse>>('/auth/wechat/qrcode/login', {
-    method: 'POST',
-    data: { ticket },
-  })
-}
-
-/** 微信新用户补全注册 */
-export async function completeWechatRegistration(tempToken: string, inviteCode: string) {
-  return request<API.BaseResponse<API.TokenResponse>>('/auth/wechat/complete', {
+/** OAuth 新用户补全注册（提交邀请码） */
+export async function completeOAuthRegistration(tempToken: string, inviteCode: string) {
+  return request<API.BaseResponse<API.TokenResponse>>('/auth/oauth/complete', {
     method: 'POST',
     data: { tempToken, inviteCode },
   })
 }
 
+/** 刷新令牌（轮换返回新令牌对） */
+export async function refreshToken(refreshToken: string) {
+  return request<API.BaseResponse<API.TokenResponse>>('/auth/refresh', {
+    method: 'POST',
+    headers: { 'X-Refresh-Token': refreshToken },
+  })
+}
+
 /** 登出 */
-export async function logout() {
+export async function logout(refreshToken?: string) {
   return request<API.BaseResponse<boolean>>('/auth/logout', {
     method: 'POST',
+    headers: refreshToken ? { 'X-Refresh-Token': refreshToken } : undefined,
   })
 }
 

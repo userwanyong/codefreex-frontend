@@ -8,17 +8,25 @@ import {
   SafetyOutlined,
   GiftOutlined,
   ThunderboltOutlined,
+  UserOutlined,
+  MobileOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/userStore'
-import { loginByEmail, sendEmailCode, register } from '@/api/authController'
+import {
+  getLoginMethods,
+  loginByPassword,
+  sendLoginCode,
+  loginByCode,
+  register,
+  getOAuthAuthorizeUrl,
+  completeOAuthRegistration,
+} from '@/api/authController'
 import { parseResponseData } from '@/utils/response'
-import WechatQrCode from '@/components/WechatQrCode.vue'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const loading = ref(false)
-const loginTab = ref('wechat')
 
 // Mode: 'login' | 'register'
 const mode = ref<'login' | 'register'>('login')
@@ -32,32 +40,93 @@ watch(
 )
 
 function switchMode(target: 'login' | 'register') {
-  loginTab.value = 'email'
   mode.value = target
   router.replace({ name: target })
 }
 
-// --- Login form ---
-const loginForm = reactive({ email: '', password: '' })
+// ==================== 动态登录方式（与管理端配置实时同步） ====================
 
-async function handleEmailLogin() {
+const methods = ref<string[]>([])
+const methodsLoading = ref(true)
+
+const passwordEnabled = computed(() => methods.value.includes('password'))
+const codeMethods = computed(() =>
+  methods.value.filter((m) => m.startsWith('email:') || m.startsWith('sms:')),
+)
+const oauthMethods = computed(() => methods.value.filter((m) => m.startsWith('oauth:')))
+
+const CODE_METHOD_LABELS: Record<string, string> = {
+  'email:smtp': '邮箱验证码',
+  'email:aliyun': '邮箱验证码',
+  'sms:aliyun': '手机验证码',
+}
+const OAUTH_META: Record<string, { label: string; className: string }> = {
+  'oauth:gitee': { label: 'Gitee', className: 'oauth-gitee' },
+  'oauth:github': { label: 'GitHub', className: 'oauth-github' },
+}
+
+/** 主登录方式列表：密码 + 各验证码方式 */
+const primaryMethods = computed(() => {
+  const list: string[] = []
+  if (passwordEnabled.value) {
+    list.push('password')
+  }
+  list.push(...codeMethods.value)
+  return list
+})
+
+const activeMethod = ref('password')
+
+async function loadMethods() {
+  methodsLoading.value = true
+  try {
+    const res = await getLoginMethods()
+    if (res.data?.code === 0 && res.data.data) {
+      methods.value = parseResponseData<string[]>(res.data.data)
+    }
+  } catch {
+    message.error('获取登录方式失败，请刷新重试')
+  } finally {
+    methodsLoading.value = false
+    if (!primaryMethods.value.includes(activeMethod.value)) {
+      activeMethod.value = primaryMethods.value[0] || 'password'
+    }
+  }
+}
+
+function methodLabel(method: string): string {
+  if (method === 'password') {
+    return '密码登录'
+  }
+  return CODE_METHOD_LABELS[method] || method
+}
+
+watch(primaryMethods, (list) => {
+  if (list.length && !list.includes(activeMethod.value)) {
+    activeMethod.value = list[0] || 'password'
+  }
+})
+
+// ==================== 密码登录 ====================
+
+const passwordForm = reactive({ username: '', password: '' })
+
+async function handlePasswordLogin() {
   if (loading.value) {
     return
   }
-  if (!loginForm.email || !loginForm.password) {
-    message.warning('请输入邮箱和密码')
+  if (!passwordForm.username || !passwordForm.password) {
+    message.warning('请输入账号和密码')
     return
   }
   loading.value = true
   try {
-    const res = await loginByEmail(loginForm.email, loginForm.password)
+    const res = await loginByPassword(passwordForm.username, passwordForm.password)
     if (res.data?.code === 0 && res.data.data) {
       const tokenData = parseResponseData<API.TokenResponse>(res.data.data)
-      userStore.setToken(tokenData.accessToken || '')
-      await Promise.all([userStore.fetchLoginUser(), userStore.fetchUserRoles(), userStore.fetchUserInfo()])
+      await userStore.applyLogin(tokenData)
       message.success('登录成功')
-      const redirect = (route.query.redirect as string) || '/'
-      router.push(redirect)
+      router.push((route.query.redirect as string) || '/')
     } else {
       message.error(res.data?.message || '登录失败')
     }
@@ -68,28 +137,27 @@ async function handleEmailLogin() {
   }
 }
 
-// --- Register form ---
-const regForm = reactive({
-  email: '',
-  emailCode: '',
-  password: '',
-  confirmPassword: '',
-  inviteCode: '',
-})
+// ==================== 验证码登录 ====================
+
+const codeForm = reactive({ target: '', code: '', inviteCode: '' })
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+function activeCodeMethod(): string {
+  return activeMethod.value
+}
 
 async function handleSendCode() {
   if (countdown.value > 0 || loading.value) {
     return
   }
-  if (!regForm.email) {
-    message.warning('请输入邮箱')
+  if (!codeForm.target) {
+    message.warning(activeMethod.value.startsWith('sms:') ? '请输入手机号' : '请输入邮箱')
     return
   }
   loading.value = true
   try {
-    const res = await sendEmailCode(regForm.email)
+    const res = await sendLoginCode(activeCodeMethod(), codeForm.target)
     if (res.data?.code === 0) {
       message.success('验证码已发送')
       startCountdown()
@@ -114,11 +182,51 @@ function startCountdown() {
   }, 1000)
 }
 
+async function handleCodeLogin() {
+  if (loading.value) {
+    return
+  }
+  if (!codeForm.target || !codeForm.code) {
+    message.warning('请填写完整信息')
+    return
+  }
+  loading.value = true
+  try {
+    const res = await loginByCode({
+      method: activeCodeMethod(),
+      target: codeForm.target,
+      code: codeForm.code,
+      inviteCode: codeForm.inviteCode || undefined,
+    })
+    if (res.data?.code === 0 && res.data.data) {
+      const tokenData = parseResponseData<API.TokenResponse>(res.data.data)
+      await userStore.applyLogin(tokenData)
+      message.success('登录成功')
+      router.push((route.query.redirect as string) || '/')
+    } else {
+      message.error(res.data?.message || '登录失败')
+    }
+  } catch {
+    message.error('登录失败，请检查网络')
+  } finally {
+    loading.value = false
+  }
+}
+
+// ==================== 注册 ====================
+
+const regForm = reactive({
+  email: '',
+  password: '',
+  confirmPassword: '',
+  inviteCode: '',
+})
+
 async function handleRegister() {
   if (loading.value) {
     return
   }
-  if (!regForm.email || !regForm.emailCode || !regForm.password || !regForm.inviteCode) {
+  if (!regForm.email || !regForm.password || !regForm.inviteCode) {
     message.warning('请填写完整信息')
     return
   }
@@ -134,17 +242,14 @@ async function handleRegister() {
   try {
     const res = await register({
       email: regForm.email,
-      emailCode: regForm.emailCode,
       password: regForm.password,
       inviteCode: regForm.inviteCode,
     })
     if (res.data?.code === 0 && res.data.data) {
       const tokenData = parseResponseData<API.TokenResponse>(res.data.data)
-      userStore.setToken(tokenData.accessToken || '')
-      await Promise.all([userStore.fetchLoginUser(), userStore.fetchUserRoles(), userStore.fetchUserInfo()])
+      await userStore.applyLogin(tokenData)
       message.success('注册成功')
-      const redirect = (route.query.redirect as string) || '/'
-      router.push(redirect)
+      router.push((route.query.redirect as string) || '/')
     } else {
       message.error(res.data?.message || '注册失败')
     }
@@ -155,42 +260,87 @@ async function handleRegister() {
   }
 }
 
-// --- WeChat login ---
-const wechatNewUser = ref(false)
-const wechatTempToken = ref('')
-const wechatInviteCode = ref('')
+// ==================== OAuth 登录 ====================
 
-function handleWechatLogin(token: API.TokenResponse) {
-  userStore.setToken(token.accessToken || '')
-  Promise.all([userStore.fetchLoginUser(), userStore.fetchUserRoles(), userStore.fetchUserInfo()]).then(() => {
-    message.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/'
-    router.push(redirect)
-  })
-}
-
-function handleWechatNewUser(tempToken: string, nickname: string, _avatar: string) {
-  wechatNewUser.value = true
-  wechatTempToken.value = tempToken
-  message.info(`${nickname}，请填写邀请码完成注册`)
-}
-
-async function handleWechatComplete() {
+async function handleOAuthLogin(method: string) {
   if (loading.value) {
     return
   }
-  if (!wechatInviteCode.value) {
+  const provider = method.substring('oauth:'.length)
+  loading.value = true
+  try {
+    const res = await getOAuthAuthorizeUrl(provider)
+    if (res.data?.code === 0 && res.data.data) {
+      // 授权地址是普通字符串，不是 JSON 编码的数据，直接使用
+      const url = typeof res.data.data === 'string' ? res.data.data : parseResponseData<string>(res.data.data)
+      if (url) {
+        window.location.href = url
+        return
+      }
+    }
+    message.error(res.data?.message || '获取授权地址失败')
+  } catch {
+    message.error('获取授权地址失败，请检查网络')
+  } finally {
+    loading.value = false
+  }
+}
+
+// OAuth 回调落地：#oauth=success&accessToken=.. / pending&tempToken=.. / failed&message=..
+const oauthPending = ref(false)
+const oauthTempToken = ref('')
+const oauthNickname = ref('')
+const oauthInviteCode = ref('')
+
+function handleOAuthHash() {
+  const hash = window.location.hash
+  if (!hash.startsWith('#oauth=')) {
+    return
+  }
+  // 清除 hash，避免刷新后重复处理
+  history.replaceState(null, '', window.location.pathname + window.location.search)
+
+  const params = new URLSearchParams(hash.substring(1))
+  const status = params.get('oauth')
+  if (status === 'success') {
+    const accessToken = params.get('accessToken') || ''
+    const refreshTokenValue = params.get('refreshToken') || ''
+    if (accessToken) {
+      userStore.setTokens(accessToken, refreshTokenValue || undefined)
+      userStore
+        .applyLogin({ accessToken, refreshToken: refreshTokenValue })
+        .then(() => {
+          message.success('登录成功')
+          router.push((route.query.redirect as string) || '/')
+        })
+        .catch(() => message.error('登录信息获取失败，请重新登录'))
+    }
+  } else if (status === 'pending') {
+    oauthTempToken.value = params.get('tempToken') || ''
+    oauthNickname.value = params.get('nickname') || ''
+    if (oauthTempToken.value) {
+      oauthPending.value = true
+      message.info(`${oauthNickname.value || '新用户'}，请填写邀请码完成注册`)
+    }
+  } else if (status === 'failed') {
+    message.error(params.get('message') || 'OAuth 登录失败')
+  }
+}
+
+async function handleOAuthComplete() {
+  if (loading.value) {
+    return
+  }
+  if (!oauthInviteCode.value) {
     message.warning('请输入邀请码')
     return
   }
   loading.value = true
   try {
-    const { completeWechatRegistration } = await import('@/api/authController')
-    const res = await completeWechatRegistration(wechatTempToken.value, wechatInviteCode.value)
+    const res = await completeOAuthRegistration(oauthTempToken.value, oauthInviteCode.value)
     if (res.data?.code === 0 && res.data.data) {
       const tokenData = parseResponseData<API.TokenResponse>(res.data.data)
-      userStore.setToken(tokenData.accessToken || '')
-      await Promise.all([userStore.fetchLoginUser(), userStore.fetchUserRoles(), userStore.fetchUserInfo()])
+      await userStore.applyLogin(tokenData)
       message.success('注册成功')
       router.push('/')
     } else {
@@ -203,7 +353,8 @@ async function handleWechatComplete() {
   }
 }
 
-// --- Code generation animation ---
+// ==================== 代码生成动画（品牌面板） ====================
+
 const codeLines = ref<string[]>([])
 const currentLine = ref('')
 const cursorVisible = ref(true)
@@ -316,6 +467,8 @@ watch(mode, () => {
 })
 
 onMounted(() => {
+  loadMethods()
+  handleOAuthHash()
   startTyping()
   cursorTimer = setInterval(() => {
     cursorVisible.value = !cursorVisible.value
@@ -370,18 +523,30 @@ onUnmounted(() => {
     <!-- Right: Form Panel -->
     <div class="form-panel">
       <div class="form-wrapper">
-        <!-- WeChat new user completion -->
-        <template v-if="wechatNewUser">
+        <!-- OAuth new user completion -->
+        <template v-if="oauthPending">
           <div class="form-header">
             <h1 class="form-title">完成注册</h1>
-            <p class="form-subtitle">首次使用微信登录，请填写邀请码</p>
+            <p class="form-subtitle">首次使用第三方账号登录，请填写邀请码</p>
           </div>
           <a-form layout="vertical">
             <a-form-item label="邀请码">
-              <a-input v-model:value="wechatInviteCode" placeholder="请输入邀请码" size="large" />
+              <a-input
+                v-model:value="oauthInviteCode"
+                placeholder="请输入邀请码"
+                size="large"
+                :prefix="h(GiftOutlined)"
+              />
             </a-form-item>
             <a-form-item>
-              <a-button type="primary" :loading="loading" block size="large" class="submit-btn" @click="handleWechatComplete">
+              <a-button
+                type="primary"
+                :loading="loading"
+                block
+                size="large"
+                class="submit-btn"
+                @click="handleOAuthComplete"
+              >
                 完成注册
               </a-button>
             </a-form-item>
@@ -395,64 +560,163 @@ onUnmounted(() => {
             <Transition name="title-swap" mode="out-in">
               <div :key="mode">
                 <h1 class="form-title">{{ mode === 'login' ? '欢迎回来' : '创建账号' }}</h1>
-                <p class="form-subtitle">{{ mode === 'login' ? '登录你的账号，继续创造' : '开启你的零代码创造之旅' }}</p>
+                <p class="form-subtitle">
+                  {{ mode === 'login' ? '登录你的账号，继续创造' : '开启你的零代码创造之旅' }}
+                </p>
               </div>
             </Transition>
           </div>
 
-          <!-- Tabs: WeChat / Email -->
-          <a-tabs v-model:activeKey="loginTab" centered destroyInactiveTabPane class="auth-tabs">
-            <!-- WeChat Tab -->
-            <a-tab-pane key="wechat" tab="微信登录">
-              <div class="wechat-wrapper">
-                <WechatQrCode @login="handleWechatLogin" @new-user="handleWechatNewUser" />
+          <div v-if="methodsLoading" class="methods-loading">
+            <a-spin tip="加载登录方式..." />
+          </div>
+
+          <template v-else>
+            <!-- ==================== 登录 ==================== -->
+            <div v-if="mode === 'login'" key="login-view">
+              <!-- 多种主登录方式时显示切换 -->
+              <div v-if="primaryMethods.length > 1" class="method-switch">
+                <button
+                  v-for="m in primaryMethods"
+                  :key="m"
+                  type="button"
+                  class="method-switch-item"
+                  :class="{ active: activeMethod === m }"
+                  @click="activeMethod = m"
+                >
+                  {{ methodLabel(m) }}
+                </button>
               </div>
-            </a-tab-pane>
 
-            <!-- Email Tab -->
-            <a-tab-pane key="email" :tab="mode === 'login' ? '邮箱登录' : '邮箱注册'">
-              <!-- Login form -->
+              <!-- 密码登录表单 -->
               <Transition name="form-swap" mode="out-in">
-                <div v-if="mode === 'login'" key="login-form">
-                  <a-form :model="loginForm" layout="vertical" @finish="handleEmailLogin">
-                    <a-form-item name="email">
-                      <a-input
-                        v-model:value="loginForm.email"
-                        placeholder="请输入邮箱"
-                        size="large"
-                        :prefix="h(MailOutlined)"
-                      />
-                    </a-form-item>
-                    <a-form-item name="password">
-                      <a-input-password
-                        v-model:value="loginForm.password"
-                        placeholder="请输入密码"
-                        size="large"
-                        :prefix="h(LockOutlined)"
-                      />
-                    </a-form-item>
-                    <a-form-item>
-                      <a-button
-                        type="primary"
-                        html-type="submit"
-                        :loading="loading"
-                        block
-                        size="large"
-                        class="submit-btn"
-                      >
-                        登录
-                      </a-button>
-                    </a-form-item>
-                  </a-form>
+                <a-form
+                  v-if="activeMethod === 'password' && passwordEnabled"
+                  key="password-form"
+                  :model="passwordForm"
+                  layout="vertical"
+                  @finish="handlePasswordLogin"
+                >
+                  <a-form-item name="username">
+                    <a-input
+                      v-model:value="passwordForm.username"
+                      placeholder="请输入用户名或邮箱"
+                      size="large"
+                      :prefix="h(UserOutlined)"
+                    />
+                  </a-form-item>
+                  <a-form-item name="password">
+                    <a-input-password
+                      v-model:value="passwordForm.password"
+                      placeholder="请输入密码"
+                      size="large"
+                      :prefix="h(LockOutlined)"
+                    />
+                  </a-form-item>
+                  <a-form-item>
+                    <a-button
+                      type="primary"
+                      html-type="submit"
+                      :loading="loading"
+                      block
+                      size="large"
+                      class="submit-btn"
+                    >
+                      登录
+                    </a-button>
+                  </a-form-item>
+                </a-form>
 
-                  <div class="form-footer">
-                    还没有账号？
-                    <a class="switch-link" @click="switchMode('register')">立即注册</a>
-                  </div>
+                <!-- 验证码登录表单 -->
+                <a-form
+                  v-else-if="codeMethods.includes(activeMethod)"
+                  :key="`${activeMethod}-form`"
+                  :model="codeForm"
+                  layout="vertical"
+                  @finish="handleCodeLogin"
+                >
+                  <a-form-item name="target">
+                    <a-input
+                      v-model:value="codeForm.target"
+                      :placeholder="activeMethod.startsWith('sms:') ? '请输入手机号' : '请输入邮箱'"
+                      size="large"
+                      :prefix="activeMethod.startsWith('sms:') ? h(MobileOutlined) : h(MailOutlined)"
+                    />
+                  </a-form-item>
+                  <a-form-item name="code">
+                    <a-input-search
+                      v-model:value="codeForm.code"
+                      placeholder="请输入验证码"
+                      size="large"
+                      :prefix="h(SafetyOutlined)"
+                      @search="handleSendCode"
+                    >
+                      <template #enterButton>
+                        <a-button :disabled="countdown > 0" class="code-btn">
+                          {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
+                        </a-button>
+                      </template>
+                    </a-input-search>
+                  </a-form-item>
+                  <a-form-item name="inviteCode">
+                    <a-input
+                      v-model:value="codeForm.inviteCode"
+                      placeholder="邀请码（新用户必填，老用户可忽略）"
+                      size="large"
+                      :prefix="h(GiftOutlined)"
+                    />
+                  </a-form-item>
+                  <a-form-item>
+                    <a-button
+                      type="primary"
+                      html-type="submit"
+                      :loading="loading"
+                      block
+                      size="large"
+                      class="submit-btn"
+                    >
+                      登录 / 注册
+                    </a-button>
+                  </a-form-item>
+                </a-form>
+
+                <!-- 无可用登录方式 -->
+                <div v-else key="no-method" class="no-method">
+                  <p>暂无可用的登录方式，请联系管理员</p>
                 </div>
+              </Transition>
 
-                <!-- Register form -->
-                <div v-else key="register-form">
+              <!-- OAuth 第三方登录 -->
+              <div v-if="oauthMethods.length" class="oauth-section">
+                <div class="divider">
+                  <span>其他登录方式</span>
+                </div>
+                <div class="oauth-buttons">
+                  <button
+                    v-for="m in oauthMethods"
+                    :key="m"
+                    type="button"
+                    class="oauth-btn"
+                    :class="OAUTH_META[m]?.className"
+                    :disabled="loading"
+                    @click="handleOAuthLogin(m)"
+                  >
+                    <span class="oauth-icon">{{ OAUTH_META[m]?.label.charAt(0) || 'O' }}</span>
+                    {{ OAUTH_META[m]?.label || m }} 登录
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="passwordEnabled" class="form-footer">
+                还没有账号？
+                <a class="switch-link" @click="switchMode('register')">立即注册</a>
+              </div>
+            </div>
+
+            <!-- ==================== 注册 ==================== -->
+            <Transition v-else name="form-swap" mode="out-in">
+              <div key="register-view">
+                <template v-if="passwordEnabled">
                   <a-form :model="regForm" layout="vertical" @finish="handleRegister">
                     <a-form-item name="email">
                       <a-input
@@ -461,21 +725,6 @@ onUnmounted(() => {
                         size="large"
                         :prefix="h(MailOutlined)"
                       />
-                    </a-form-item>
-                    <a-form-item name="emailCode">
-                      <a-input-search
-                        v-model:value="regForm.emailCode"
-                        placeholder="请输入验证码"
-                        size="large"
-                        :prefix="h(SafetyOutlined)"
-                        @search="handleSendCode"
-                      >
-                        <template #enterButton>
-                          <a-button :disabled="countdown > 0" class="code-btn">
-                            {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
-                          </a-button>
-                        </template>
-                      </a-input-search>
                     </a-form-item>
                     <a-form-item name="password">
                       <a-input-password
@@ -519,10 +768,14 @@ onUnmounted(() => {
                     已有账号？
                     <a class="switch-link" @click="switchMode('login')">立即登录</a>
                   </div>
+                </template>
+                <div v-else class="no-method">
+                  <p>当前未开放自主注册，请使用左侧提供的登录方式</p>
+                  <a class="switch-link" @click="switchMode('login')">返回登录</a>
                 </div>
-              </Transition>
-            </a-tab-pane>
-          </a-tabs>
+              </div>
+            </Transition>
+          </template>
         </template>
       </div>
     </div>
@@ -772,19 +1025,133 @@ onUnmounted(() => {
   transform: translateX(-20px);
 }
 
-/* Tabs */
-.auth-tabs {
-  margin-top: var(--space-2);
-}
-
-.auth-tabs :deep(.ant-tabs-nav) {
-  margin-bottom: var(--space-4);
-}
-
-.wechat-wrapper {
+.methods-loading {
   display: flex;
   justify-content: center;
-  padding: var(--space-2) 0;
+  padding: var(--space-10) 0;
+}
+
+.no-method {
+  text-align: center;
+  padding: var(--space-8) 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* 登录方式切换（分段控件） */
+.method-switch {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: var(--space-6);
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.method-switch-item {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.method-switch-item:hover {
+  color: var(--text-primary);
+}
+
+.method-switch-item.active {
+  color: #16A34A;
+  background: var(--bg-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* OAuth */
+.oauth-section {
+  margin-top: var(--space-4);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: var(--space-4) 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.oauth-buttons {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.oauth-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.oauth-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
+
+.oauth-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.oauth-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 50%;
+  color: #fff;
+}
+
+.oauth-gitee .oauth-icon {
+  background: #c71d23;
+}
+
+.oauth-gitee:hover:not(:disabled) {
+  border-color: #c71d23;
+}
+
+.oauth-github .oauth-icon {
+  background: #24292f;
+}
+
+.oauth-github:hover:not(:disabled) {
+  border-color: #24292f;
 }
 
 /* Code button (register) */

@@ -165,7 +165,7 @@ API 请求配置集中在 `config/api.ts` 文件中：
 ```typescript
 export const API_CONFIG = {
   baseURL: '/api',           // 前端请求前缀
-  proxyTarget: 'http://localhost:8123', // Vite 开发代理目标（后端地址）
+  proxyTarget: 'http://localhost:18123', // Vite 开发代理目标（后端地址）
   timeout: 60000,            // 请求超时时间（ms）
 }
 ```

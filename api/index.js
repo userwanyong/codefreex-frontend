@@ -4,7 +4,7 @@ export const config = {
 }
 
 export default async function handler(req, res) {
-  const backendUrl = process.env.BACKEND_URL || 'http://localhost:8123'
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:18123'
   const targetUrl = `${backendUrl}${req.url}`
 
   try {
