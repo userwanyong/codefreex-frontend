@@ -134,6 +134,9 @@ const navItems = computed(() => {
 
 const adminItems = [
   { key: 'adminusers', label: '用户管理', path: '/admin/user' },
+  { key: 'adminroles', label: '角色管理', path: '/admin/role' },
+  { key: 'adminpermissions', label: '权限管理', path: '/admin/permission' },
+  { key: 'adminloginmethods', label: '登录方式', path: '/admin/login-methods' },
   { key: 'adminapps', label: '应用管理', path: '/admin/app' },
   { key: 'adminfeatured', label: '精选审批', path: '/admin/featured-applications' },
   { key: 'admintags', label: '标签管理', path: '/admin/tags' },

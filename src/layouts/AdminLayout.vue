@@ -36,8 +36,10 @@ function navigate(path: string) {
     <!-- Top Bar -->
     <header class="admin-header">
       <div class="header-left">
-        <span class="header-logo">&lt;/&gt;</span>
-        <span class="header-title">CodeFreex</span>
+        <a class="header-brand" title="返回首页" @click="router.push('/')">
+          <span class="header-logo">&lt;/&gt;</span>
+          <span class="header-title">CodeFreex</span>
+        </a>
         <span class="header-badge">Admin</span>
       </div>
       <div class="header-right">
@@ -96,6 +98,14 @@ function navigate(path: string) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .header-logo {
