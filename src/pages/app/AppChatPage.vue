@@ -176,7 +176,8 @@ async function tryReconnect() {
     currentNode.value = status.currentNode as API.WorkflowNode || null
     retryCount.value = status.retryCount || 0
     codeContent.value = ''
-    rightView.value = 'code'
+    // 已有项目文件（修改/迭代场景）保持预览视图；仅首次生成重连才展示代码流式面板
+    rightView.value = fileCodeContent.value ? 'preview' : 'code'
 
     // 复用已有的最后一条 AI 消息，避免与历史记录重复显示
     let statusMsg: ChatMsg | null = null
@@ -405,7 +406,6 @@ async function tryReconnect() {
         sending.value = false
         currentNode.value = null
         currentAbortController = null
-        appStatus.value = 'generated'
         loadAppCode()
         refreshAppInfo()
         scrollToBottom()
@@ -927,7 +927,6 @@ async function sendToAI(text: string) {
       sending.value = false
       currentNode.value = null
       currentAbortController = null
-      appStatus.value = 'generated'
       loadAppCode()
       refreshAppInfo()
       scrollToBottom()
@@ -938,12 +937,23 @@ async function sendToAI(text: string) {
     onError(err) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
 
-      // 限流错误：显示友好提示，不显示"生成失败"状态
+      // 限流错误（自家并发限流或上游 AI 服务 qpm 限流）：友好展示并终止运行中节点
       const errText = typeof err === 'string' ? err : ''
-      if (errText.includes('请求过于频繁')) {
-        message.warning(errText)
+      if (errText.includes('请求过于频繁') || errText.includes('RateLimitExceeded')) {
+        let friendly = 'AI 服务繁忙，请稍后重试'
+        try {
+          const parsed = JSON.parse(errText) as { message?: string }
+          if (parsed?.message) friendly = parsed.message
+        } catch { /* 非 JSON（自家限流纯文本）则直接使用 */ }
+        if (errText && !errText.startsWith('{')) friendly = errText
+        message.warning(friendly)
         const target = messages.value.find((m) => m.id === statusMsgId)
-        if (target) target.status = 'done'
+        if (target) {
+          statusItems.forEach(it => { if (it.status === 'running') it.status = 'error' })
+          statusItems.push({ icon: '⚠️', label: 'AI 服务繁忙', detail: '请求触发限流，请稍后重试', status: 'warning' })
+          target.statusItems = [...statusItems]
+          target.status = 'error'
+        }
         sending.value = false
         currentNode.value = null
         currentAbortController = null
@@ -985,10 +995,10 @@ async function handleSend() {
   inputText.value = ''
 
   if (editSelector.value) {
-    const selector = editSelector.value
     const ctx = editContext.value
     const fullText = `[可视化编辑]\n${ctx}\n\n用户指令: ${text}`
-    addMessage('user', `[编辑] 目标元素: ${selector}\n${text}`, 'done')
+    // 本地展示与数据库持久化使用同一份内容，展示层统一渲染为"已选中元素"标签+指令
+    addMessage('user', fullText, 'done')
     editSelector.value = ''
     editContext.value = ''
     await sendToAI(fullText)
@@ -1180,11 +1190,26 @@ function resolveElement(e: MouseEvent) {
   const y = e.clientY - rect.top
 
   overlay.style.pointerEvents = 'none'
-  const el = iframe.contentDocument.elementFromPoint(x, y) as HTMLElement | null
+  let el = iframe.contentDocument.elementFromPoint(x, y) as HTMLElement | null
   overlay.style.pointerEvents = 'auto'
 
-  if (!el || el === iframe.contentDocument.body || el === iframe.contentDocument.documentElement) return null
+  if (!el) return null
+  // 点击空白处命中 body/html 时，回退到页面最外层内容容器，保证"最外层"可被选中
+  if (el === iframe.contentDocument.body || el === iframe.contentDocument.documentElement) {
+    const outer = iframe.contentDocument.body.firstElementChild as HTMLElement | null
+    if (!outer || /^(script|style|link|meta)$/i.test(outer.tagName)) return null
+    el = outer
+  }
   return { el, iframe }
+}
+
+/** 编辑模式下覆盖层拦截了滚轮事件，需要手动转发给 iframe，否则长页面底部元素无法滚到可视区 */
+function handleEditOverlayWheel(e: WheelEvent) {
+  if (!editMode.value) return
+  const overlay = e.currentTarget as HTMLElement
+  const iframe = overlay.previousElementSibling as HTMLIFrameElement
+  if (!iframe?.contentWindow) return
+  iframe.contentWindow.scrollBy({ top: e.deltaY, left: e.deltaX })
 }
 
 function handleEditOverlayMove(e: MouseEvent) {
@@ -1333,7 +1358,7 @@ onUnmounted(() => {
           <button class="switch-btn" :class="{ active: rightView === 'code' }" @click="rightView = 'code'">
             <CodeOutlined /> 代码
           </button>
-          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'" :disabled="!deployKey || sending">
+          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'" :disabled="!deployKey || (sending && !fileCodeContent)">
             <EyeOutlined /> 预览
           </button>
         </div>
@@ -1455,6 +1480,7 @@ onUnmounted(() => {
               class="edit-overlay"
               @mousemove="handleEditOverlayMove"
               @click="handleEditOverlayClick"
+              @wheel.prevent="handleEditOverlayWheel"
             />
             <div v-else class="preview-loading">
               <div class="loading-spinner" />
@@ -1913,7 +1939,7 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 80px; /* leave space for instruction bar */
+  bottom: 0;
   cursor: crosshair;
   z-index: 5;
 }
