@@ -27,6 +27,8 @@ const props = defineProps<{
 const selectedPath = ref('')
 const copied = ref(false)
 const expandedDirs = ref<Set<string>>(new Set())
+/** 用户手动折叠过的目录：流式更新时不强制重新展开 */
+const manuallyCollapsed = ref<Set<string>>(new Set())
 const codeWrapperRef = ref<HTMLElement | null>(null)
 
 const files = computed(() => parseCodeFiles(props.content))
@@ -46,6 +48,20 @@ watch(files, (newFiles) => {
   }
 }, { immediate: true })
 
+// 目录默认全部展开（用户手动折叠过的除外），新增子目录也会自动展开
+watch(fileTree, (tree) => {
+  function walk(nodes: TreeNode[]) {
+    for (const node of nodes) {
+      if (!node.isDir) continue
+      if (!manuallyCollapsed.value.has(node.path)) {
+        expandedDirs.value.add(node.path)
+      }
+      if (node.children) walk(node.children)
+    }
+  }
+  walk(tree)
+}, { immediate: true })
+
 function expandParentDirs(filePath: string) {
   const parts = filePath.split('/').filter(Boolean)
   for (let i = 1; i < parts.length; i++) {
@@ -60,8 +76,10 @@ function isExpanded(path: string) {
 function toggleDir(path: string) {
   if (expandedDirs.value.has(path)) {
     expandedDirs.value.delete(path)
+    manuallyCollapsed.value.add(path)
   } else {
     expandedDirs.value.add(path)
+    manuallyCollapsed.value.delete(path)
   }
 }
 

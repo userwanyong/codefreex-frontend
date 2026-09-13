@@ -75,6 +75,8 @@ const codeContent = ref('')
 const prdContent = ref('')
 const historyPrdContent = ref('')
 const fileCodeContent = ref('')
+/** 历史中存在已完成的生成（persistNode 标记）：true=修改已有项目场景，false=初次生成中 */
+const hasCompletedGeneration = ref(false)
 
 const NODE_DESCRIPTIONS: Record<string, string> = {
   promptGuardNode: '关键词安全检查中...',
@@ -136,12 +138,10 @@ const rightView = ref<'code' | 'preview'>('code')
 const currentAIContent = computed(() => {
   // 生成完成后：优先使用 API 返回的磁盘文件内容（更准确）
   if (!sending.value) return fileCodeContent.value || codeContent.value || ''
-  // 流式生成中：如果 codeContent 能解析出文件，优先用它（正常流式或完整回放）
-  // 否则 fallback 到磁盘文件（回放不完整时，codeContent 缺少代码块开头标记）
-  if (codeContent.value && parseCodeFiles(codeContent.value).length > 0) {
-    return codeContent.value
-  }
-  return fileCodeContent.value || codeContent.value || ''
+  // 流式生成中：磁盘文件优先（Vue 增量落盘实时可读），避免模型收尾总结被误解析为
+  // 伪文件（如 file.txt）混入文件树；首次生成尚未落盘时回退到流式内容保留打字效果
+  if (fileCodeContent.value) return fileCodeContent.value
+  return codeContent.value || ''
 })
 
 const statusLabel = computed(() => {
@@ -176,8 +176,8 @@ async function tryReconnect() {
     currentNode.value = status.currentNode as API.WorkflowNode || null
     retryCount.value = status.retryCount || 0
     codeContent.value = ''
-    // 已有项目文件（修改/迭代场景）保持预览视图；仅首次生成重连才展示代码流式面板
-    rightView.value = fileCodeContent.value ? 'preview' : 'code'
+    // 历史存在完成标记（修改/迭代场景）且磁盘有文件时保持预览；初次生成重连展示代码流式面板
+    rightView.value = fileCodeContent.value && hasCompletedGeneration.value ? 'preview' : 'code'
 
     // 复用已有的最后一条 AI 消息，避免与历史记录重复显示
     let statusMsg: ChatMsg | null = null
@@ -314,7 +314,8 @@ async function tryReconnect() {
             } else if (node === 'buildNode') {
               const step = nodeData?.step
               const isDone = nodeData?.result === 'success'
-              const buildItem = { icon: '📦', label: '项目构建', status: (isDone ? 'done' : 'running') as StatusItem['status'], detail: isDone ? '构建完成' : step === 'npm_build' ? '打包中...' : step === 'npm_install' ? '安装依赖...' : '构建中...', nodeKey: 'buildNode' }
+              const isFailed = nodeData?.result === 'failed'
+              const buildItem = { icon: '📦', label: '项目构建', status: (isDone ? 'done' : isFailed ? 'error' : 'running') as StatusItem['status'], detail: isDone ? '构建完成' : isFailed ? (msg || '构建失败，自动修复中') : step === 'npm_build' ? '打包中...' : step === 'npm_install' ? '安装依赖...' : '构建中...', nodeKey: 'buildNode' }
               const qcIdx = statusItems.findIndex(it => it.nodeKey === 'qualityCheckNode')
               if (qcIdx >= 0) statusItems.splice(qcIdx, 0, buildItem)
               else statusItems.push(buildItem)
@@ -366,6 +367,9 @@ async function tryReconnect() {
             codeContent.value += event.data
             if (!codeStatusAdded) {
               codeStatusAdded = true
+              // 流式代码开始输出 = 初次生成场景，切到代码面板观看生成过程；
+              // 修改/迭代为工具调用模式无 ai_r 事件，保持预览视图不受影响
+              rightView.value = 'code'
               const cgIdx = statusItems.findIndex(it => it.nodeKey === 'codeGenNode')
               if (cgIdx >= 0) statusItems.splice(cgIdx, 1)
               if (!isVisualEditMode) {
@@ -462,6 +466,15 @@ async function loadApp() {
       // 加载历史对话
       await loadChatHistory()
 
+      // 是否存在已完成的生成（持久化标记）：区分"修改已有项目"与"初次生成中"。
+      // 初次生成是流式增量落盘，生成中磁盘也有半成品文件，不能仅凭文件存在判定可预览。
+      // 注意：历史分组会把 STATUS 标记转成 statusItems 并清空 content，两处都要检查
+      hasCompletedGeneration.value = messages.value.some((m) => {
+        if (m.role !== 'ai') return false
+        if (m.statusItems?.some((it) => it.label === '生成完成' || it.label === '修改完成')) return true
+        return typeof m.content === 'string' && (m.content.includes('生成完成') || m.content.includes('修改完成'))
+      })
+
       // 从文件 API 加载代码内容
       await loadAppCode()
 
@@ -497,7 +510,7 @@ async function loadAppCode() {
     if (res.data?.code === 0 && res.data.data) {
       fileCodeContent.value = res.data.data
       // 只有不在流式生成中时才切到预览
-      if (fileCodeContent.value && !sending.value) rightView.value = 'preview'
+      if (fileCodeContent.value && !sending.value && hasCompletedGeneration.value) rightView.value = 'preview'
     }
   } catch { /* ignore */ }
 }
