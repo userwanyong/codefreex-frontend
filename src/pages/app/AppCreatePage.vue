@@ -7,6 +7,7 @@ import { createApp } from '@/api/appController'
 import { getAllTags } from '@/api/tagController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
+import { loadCreditConfig } from '@/utils/creditConfig'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -26,11 +27,13 @@ async function handleCreate() {
     return
   }
 
-  // 创建前检查码点余额
+  // 创建前检查码点余额（消耗数由系统配置决定）
+  const creditConfig = await loadCreditConfig()
   await userStore.fetchUserInfo()
   const remaining = userStore.userInfo?.remainingCredits ?? 0
-  if (remaining < 50) {
-    message.error('码点不足，创建应用需要 50 码点，请先兑换码点')
+  const firstGenerateCost = creditConfig.firstGenerateCost ?? 50
+  if (remaining < firstGenerateCost) {
+    message.error(`码点不足，创建应用需要 ${firstGenerateCost} 码点，请先兑换码点`)
     return
   }
 

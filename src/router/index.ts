@@ -152,6 +152,16 @@ const router = createRouter({
           name: 'adminfeatured',
           component: () => import('@/pages/admin/AdminFeaturedPage.vue'),
         },
+        {
+          path: 'announcements',
+          name: 'adminannouncements',
+          component: () => import('@/pages/admin/AdminAnnouncementPage.vue'),
+        },
+        {
+          path: 'system-config',
+          name: 'adminsystemconfig',
+          component: () => import('@/pages/admin/AdminConfigPage.vue'),
+        },
       ],
     },
 

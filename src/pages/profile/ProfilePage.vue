@@ -14,6 +14,7 @@ import {
 } from '@/api/userController'
 import { getMyInviter } from '@/api/inviteController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 /** 第三方/验证码自动注册账号的初始密码（与后端常量一致） */
 const AUTO_PASSWORD = '123456'
@@ -433,8 +434,7 @@ function handleBindHash() {
 }
 
 function formatDate(dateStr?: string) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  return formatDateTime(dateStr)
 }
 
 function getAvatarUrl() {
@@ -522,7 +522,7 @@ onMounted(() => {
           </div>
           <div class="extra-item">
             <span class="extra-label">注册时间</span>
-            <span class="extra-value">{{ formatDate(userInfo?.createTime).split(' ')[0] }}</span>
+            <span class="extra-value">{{ formatDate(userInfo?.createTime) }}</span>
           </div>
           <div class="extra-item">
             <span class="extra-label">邀请人</span>
@@ -720,6 +720,14 @@ onMounted(() => {
   flex-direction: column;
   gap: 16px;
   padding-bottom: 24px;
+}
+
+/* 卡片实际位于 a-spin 的内层容器中，需让该容器也成为纵向 flex 布局，卡片间才有间距 */
+.profile-page :deep(.ant-spin-nested-loading),
+.profile-page :deep(.ant-spin-container) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* Profile Header Card */

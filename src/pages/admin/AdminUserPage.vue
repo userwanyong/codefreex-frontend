@@ -11,6 +11,7 @@ import {
 } from '@/api/userController'
 import { listRoles } from '@/api/roleController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 /** 第三方/验证码自动注册账号的初始密码（后端在账号落地时统一重置） */
 const AUTO_PASSWORD = '123456'
@@ -339,8 +340,7 @@ const oauthProviderNames = computed(() => ({
 }))
 
 function formatDate(dateStr?: string) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  return formatDateTime(dateStr)
 }
 
 onMounted(() => {

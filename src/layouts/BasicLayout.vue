@@ -13,10 +13,13 @@ import {
   MenuOutlined,
   CloseOutlined,
   BellOutlined,
+  LeftOutlined,
+  RightOutlined,
 } from '@ant-design/icons-vue'
 import { useThemeStore } from '@/stores/themeStore'
 import { getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead } from '@/api/notificationController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 import { message } from 'ant-design-vue'
 
 const themeStore = useThemeStore()
@@ -34,6 +37,7 @@ const unreadCount = ref(0)
 const notifLoading = ref(false)
 const notifTotal = ref(0)
 const notifPageNum = ref(1)
+const notifTotalPages = computed(() => Math.max(1, Math.ceil(notifTotal.value / 10)))
 
 async function loadUnreadCount() {
   if (!userStore.isLoggedIn) return
@@ -96,15 +100,7 @@ function handleNotifPageChange(page: number) {
 }
 
 function formatNotifTime(dateStr?: string) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
-  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前'
-  if (diff < 604800000) return Math.floor(diff / 86400000) + '天前'
-  return date.toLocaleDateString('zh-CN')
+  return formatDateTime(dateStr)
 }
 
 function handleScroll() {
@@ -143,6 +139,8 @@ const adminItems = [
   { key: 'adminusage', label: '用量统计', path: '/admin/usage' },
   { key: 'admininvites', label: '邀请码管理', path: '/admin/invites' },
   { key: 'adminredeems', label: '兑换码管理', path: '/admin/redeem' },
+  { key: 'adminannouncements', label: '公告管理', path: '/admin/announcements' },
+  { key: 'adminsystemconfig', label: '系统配置', path: '/admin/system-config' },
 ]
 
 const isHomePage = computed(() => route.path === '/')
@@ -264,14 +262,27 @@ function navigate(path: string) {
                     </a-spin>
                   </div>
                   <div v-if="notifTotal > 10" class="notif-footer">
-                    <a-pagination
-                      size="small"
-                      :current="notifPageNum"
-                      :total="notifTotal"
-                      :page-size="10"
-                      :simple="true"
-                      @change="handleNotifPageChange"
-                    />
+                    <div class="notif-pager">
+                      <a-button
+                        size="small"
+                        type="text"
+                        class="notif-pager-btn"
+                        :disabled="notifPageNum <= 1"
+                        @click="handleNotifPageChange(notifPageNum - 1)"
+                      >
+                        <LeftOutlined /> 上一页
+                      </a-button>
+                      <span class="notif-pager-info">{{ notifPageNum }} / {{ notifTotalPages }}</span>
+                      <a-button
+                        size="small"
+                        type="text"
+                        class="notif-pager-btn"
+                        :disabled="notifPageNum >= notifTotalPages"
+                        @click="handleNotifPageChange(notifPageNum + 1)"
+                      >
+                        下一页 <RightOutlined />
+                      </a-button>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -692,6 +703,25 @@ function navigate(path: string) {
   padding: 8px 16px 12px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.notif-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.notif-pager-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.notif-pager-btn {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
 }
 
 .avatar {

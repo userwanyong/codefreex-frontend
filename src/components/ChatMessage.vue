@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { RobotOutlined, UserOutlined, LoadingOutlined, RedoOutlined, DownloadOutlined, EditOutlined } from '@ant-design/icons-vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
+import { formatDateTime } from '@/utils/datetime'
 import { useUserStore } from '@/stores/userStore'
 
 interface StatusItem {
@@ -54,9 +55,7 @@ const visualEditInstruction = computed<string | null>(() => {
 })
 
 function formatTime(ts: number) {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return formatDateTime(ts)
 }
 </script>
 

@@ -20,6 +20,7 @@ import { getApp, deployApp, cancelDeploy, downloadApp, getAppCode } from '@/api/
 import { streamWorkflowGenerate, getChatHistory, getWorkflowStatus, reconnectWorkflow } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import { parseCodeFiles } from '@/utils/codeFileParser'
+import { loadCreditConfig } from '@/utils/creditConfig'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CodeFilesPanel from '@/components/CodeFilesPanel.vue'
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
@@ -665,13 +666,14 @@ function scrollToBottom() {
 async function sendToAI(text: string) {
   if (currentAbortController) { currentAbortController.abort(); currentAbortController = null }
 
-  // 余额检查（首次生成已在创建应用时扣减50码点，这里只检查后续对话的10码点）
+  // 余额检查（首次生成已在创建应用时扣减，这里只检查后续对话轮次；消耗数由系统配置决定）
   const userStore = useUserStore()
-  await userStore.fetchUserInfo()
+  const [creditConfig] = await Promise.all([loadCreditConfig(), userStore.fetchUserInfo()])
   const remaining = userStore.userInfo?.remainingCredits ?? 0
   const isFirst = messages.value.length === 0
-  if (!isFirst && remaining < 10) {
-    message.error('码点不足，对话需要 10 码点，请先兑换码点')
+  const chatRoundCost = creditConfig.chatRoundCost ?? 10
+  if (!isFirst && remaining < chatRoundCost) {
+    message.error(`码点不足，对话需要 ${chatRoundCost} 码点，请先兑换码点`)
     return
   }
 

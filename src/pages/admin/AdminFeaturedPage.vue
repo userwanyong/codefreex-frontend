@@ -4,6 +4,7 @@ import { message, Modal } from 'ant-design-vue'
 import { CheckOutlined, CloseOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
 import { getAdminFeaturedApplications, reviewFeaturedApplication, cancelFeaturedApplication } from '@/api/appController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 const applications = ref<API.FeaturedApplication[]>([])
 const loading = ref(true)
@@ -104,8 +105,7 @@ function handleSearch() {
 }
 
 function formatDate(dateStr?: string) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  return formatDateTime(dateStr)
 }
 
 onMounted(() => loadApplications())

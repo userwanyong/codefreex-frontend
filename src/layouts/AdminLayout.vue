@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AppstoreOutlined, GiftOutlined, TagsOutlined, TeamOutlined, BookOutlined, BarChartOutlined, StarOutlined, SafetyCertificateOutlined, LockOutlined, KeyOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, GiftOutlined, TagsOutlined, TeamOutlined, BookOutlined, BarChartOutlined, StarOutlined, SafetyCertificateOutlined, LockOutlined, KeyOutlined, SettingOutlined, NotificationOutlined } from '@ant-design/icons-vue'
 import { useThemeStore } from '@/stores/themeStore'
 
 const router = useRouter()
@@ -19,6 +19,8 @@ const menuItems = [
   { key: 'admin-usage', label: '用量统计', path: '/admin/usage', icon: BarChartOutlined },
   { key: 'admin-invites', label: '邀请码管理', path: '/admin/invites', icon: GiftOutlined },
   { key: 'admin-redeems', label: '兑换码管理', path: '/admin/redeem', icon: BookOutlined },
+  { key: 'admin-announcements', label: '公告管理', path: '/admin/announcements', icon: NotificationOutlined },
+  { key: 'admin-system-config', label: '系统配置', path: '/admin/system-config', icon: SettingOutlined },
 ]
 
 const activeKey = computed(() => {

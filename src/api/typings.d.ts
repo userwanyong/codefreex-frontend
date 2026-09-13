@@ -414,4 +414,42 @@ declare namespace API {
     updateTime: string
     cachedEventCount: number
   }
+
+  // === SystemConfig ===
+  type SystemConfigItem = {
+    key?: string
+    label?: string
+    value?: string
+    valueType?: 'STRING' | 'INT' | 'DOUBLE' | 'BOOLEAN'
+    sensitive?: boolean
+    description?: string
+    defaultValue?: string
+  }
+
+  type SystemConfigGroup = {
+    group?: string
+    groupName?: string
+    items?: SystemConfigItem[]
+  }
+
+  // === Announcement ===
+  type Announcement = {
+    id?: string
+    title?: string
+    content?: string
+    status?: string // draft / published / offline
+    publishTime?: string
+    createTime?: string
+    updateTime?: string
+  }
+
+  // === CreditConfig（码点计费价格，公开） ===
+  type CreditConfig = {
+    firstGenerateCost?: number
+    chatRoundCost?: number
+    inviteReward?: number
+    inviteCreateCostPerUse?: number
+    deployHourlyCost?: number
+    deployBillingIntervalMinutes?: number
+  }
 }
