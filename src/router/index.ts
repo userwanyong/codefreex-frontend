@@ -115,6 +115,23 @@ const router = createRouter({
           alias: ['/admin/users'],
         },
         {
+          path: 'role',
+          name: 'adminroles',
+          component: () => import('@/pages/admin/AdminRolePage.vue'),
+          alias: ['/admin/roles'],
+        },
+        {
+          path: 'permission',
+          name: 'adminpermissions',
+          component: () => import('@/pages/admin/AdminPermissionPage.vue'),
+          alias: ['/admin/permissions'],
+        },
+        {
+          path: 'login-methods',
+          name: 'adminloginmethods',
+          component: () => import('@/pages/admin/AdminLoginPage.vue'),
+        },
+        {
           path: 'redeem',
           name: 'adminredeems',
           component: () => import('@/pages/admin/AdminRedeemPage.vue'),
@@ -134,6 +151,16 @@ const router = createRouter({
           path: 'featured-applications',
           name: 'adminfeatured',
           component: () => import('@/pages/admin/AdminFeaturedPage.vue'),
+        },
+        {
+          path: 'announcements',
+          name: 'adminannouncements',
+          component: () => import('@/pages/admin/AdminAnnouncementPage.vue'),
+        },
+        {
+          path: 'system-config',
+          name: 'adminsystemconfig',
+          component: () => import('@/pages/admin/AdminConfigPage.vue'),
         },
       ],
     },

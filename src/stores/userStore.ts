@@ -5,11 +5,13 @@ import { getUserInfo, getUserRoles } from '@/api/userController'
 import { parseResponseData } from '@/utils/response'
 
 const TOKEN_KEY = 'codefreex_token'
+const REFRESH_TOKEN_KEY = 'codefreex_refresh_token'
 
 export const useUserStore = defineStore('user', () => {
   const loginUser = ref<API.LoginUserContext | null>(null)
   const userInfo = ref<API.UserInfo | null>(null)
   const token = ref<string>(localStorage.getItem(TOKEN_KEY) || '')
+  const refreshToken = ref<string>(localStorage.getItem(REFRESH_TOKEN_KEY) || '')
   const roles = ref<string[]>([])
   const isInitialized = ref(false)
 
@@ -20,17 +22,28 @@ export const useUserStore = defineStore('user', () => {
   const nickname = computed(() => loginUser.value?.nickname || loginUser.value?.username || '')
   const avatar = computed(() => loginUser.value?.avatar || '')
 
-  function setToken(newToken: string) {
-    token.value = newToken
-    localStorage.setItem(TOKEN_KEY, newToken)
+  function setTokens(accessToken: string, newRefreshToken?: string) {
+    token.value = accessToken
+    localStorage.setItem(TOKEN_KEY, accessToken)
+    if (newRefreshToken) {
+      refreshToken.value = newRefreshToken
+      localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken)
+    }
+  }
+
+  function setRefreshToken(newRefreshToken: string) {
+    refreshToken.value = newRefreshToken
+    localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken)
   }
 
   function clearAuth() {
     token.value = ''
+    refreshToken.value = ''
     loginUser.value = null
     userInfo.value = null
     roles.value = []
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
   }
 
   async function fetchLoginUser() {
@@ -66,6 +79,12 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /** 登录/注册成功后落地令牌并拉取用户数据 */
+  async function applyLogin(tokenData: API.TokenResponse) {
+    setTokens(tokenData.accessToken || '', tokenData.refreshToken)
+    await Promise.all([fetchLoginUser(), fetchUserRoles(), fetchUserInfo()])
+  }
+
   async function initUser() {
     if (!token.value) {
       isInitialized.value = true
@@ -73,6 +92,9 @@ export const useUserStore = defineStore('user', () => {
     }
     try {
       await Promise.all([fetchLoginUser(), fetchUserRoles(), fetchUserInfo()])
+      if (!loginUser.value) {
+        clearAuth()
+      }
     } catch {
       clearAuth()
     } finally {
@@ -83,7 +105,7 @@ export const useUserStore = defineStore('user', () => {
   async function logout() {
     try {
       const { logout: apiLogout } = await import('@/api/authController')
-      await apiLogout()
+      await apiLogout(refreshToken.value || undefined)
     } catch {
       // ignore
     }
@@ -94,17 +116,20 @@ export const useUserStore = defineStore('user', () => {
     loginUser,
     userInfo,
     token,
+    refreshToken,
     roles,
     isInitialized,
     isLoggedIn,
     isAdmin,
     nickname,
     avatar,
-    setToken,
+    setTokens,
+    setRefreshToken,
     clearAuth,
     fetchLoginUser,
     fetchUserRoles,
     fetchUserInfo,
+    applyLogin,
     initUser,
     logout,
   }

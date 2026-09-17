@@ -6,6 +6,9 @@ import * as inviteController from './inviteController'
 import * as redeemController from './redeemController'
 import * as userController from './userController'
 import * as usageController from './usageController'
+import * as roleController from './roleController'
+import * as permissionController from './permissionController'
+import * as loginMethodController from './loginMethodController'
 
 export default {
   healthController,
@@ -16,4 +19,7 @@ export default {
   redeemController,
   userController,
   usageController,
+  roleController,
+  permissionController,
+  loginMethodController,
 }

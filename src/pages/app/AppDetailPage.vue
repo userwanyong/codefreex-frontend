@@ -38,7 +38,9 @@ import {
 } from '@/api/appController'
 import { getAllTags } from '@/api/tagController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 import { useUserStore } from '@/stores/userStore'
+import { loadCreditConfig, formatBillingPeriod } from '@/utils/creditConfig'
 
 const route = useRoute()
 const router = useRouter()
@@ -268,9 +270,18 @@ function handleDelete() {
 
 async function handleDeploy() {
   if (deploying.value || !app.value?.id) return
+  // 部署计费价格由系统配置决定，确认前向用户明示
+  const creditConfig = await loadCreditConfig()
+  const deployCost = creditConfig.deployHourlyCost ?? 10
+  const featured = app.value?.isFeatured === 1
+  const billingText = featured
+    ? '该应用为精选应用，部署期间不消耗码点。'
+    : deployCost > 0
+      ? `部署期间每${formatBillingPeriod(creditConfig.deployBillingIntervalMinutes)}消耗 ${deployCost} 码点，余额不足时部署会被自动取消。`
+      : ''
   Modal.confirm({
     title: '确认部署',
-    content: '部署后，该应用将自动设为公开状态，任何人都可以访问。确认部署吗？',
+    content: `部署后，该应用将自动设为公开状态，任何人都可以访问。${billingText}确认部署吗？`,
     okText: '确认部署',
     cancelText: '取消',
     async onOk() {
@@ -398,7 +409,7 @@ onMounted(() => loadApp())
                 <GlobalOutlined /> {{ app.isPublic === 1 ? '公开' : '私有' }}
               </span>
               <span class="detail-item">
-                <ClockCircleOutlined /> {{ app.createTime?.slice(0, 10) || '-' }}
+                <ClockCircleOutlined /> {{ formatDateTime(app.createTime) }}
               </span>
               <template v-if="app?.status === 'deployed' && deployedUrl">
                 <a :href="deployedUrl" target="_blank" class="detail-item link-item" @click.stop>
@@ -507,7 +518,8 @@ onMounted(() => loadApp())
       ok-text="提交申请"
     >
       <p style="color: var(--text-secondary); margin-bottom: 16px;">
-        申请精选后，管理员将审核您的应用。通过后将展示在首页精选区域。
+        申请精选后，管理员将审核您的应用。通过后将展示在首页精选区域，
+        <span style="color: var(--accent); font-weight: 600;">精选期间应用的部署不消耗码点</span>。
       </p>
       <a-textarea
         v-model:value="applyReason"

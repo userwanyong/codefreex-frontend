@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AppstoreOutlined, GiftOutlined, TagsOutlined, TeamOutlined, BookOutlined, BarChartOutlined, StarOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, GiftOutlined, TagsOutlined, TeamOutlined, BookOutlined, BarChartOutlined, StarOutlined, SafetyCertificateOutlined, LockOutlined, KeyOutlined, SettingOutlined, NotificationOutlined } from '@ant-design/icons-vue'
 import { useThemeStore } from '@/stores/themeStore'
 
 const router = useRouter()
@@ -10,12 +10,17 @@ const themeStore = useThemeStore()
 
 const menuItems = [
   { key: 'admin-user', label: '用户管理', path: '/admin/user', icon: TeamOutlined },
+  { key: 'admin-roles', label: '角色管理', path: '/admin/role', icon: SafetyCertificateOutlined },
+  { key: 'admin-permissions', label: '权限管理', path: '/admin/permission', icon: LockOutlined },
+  { key: 'admin-login-methods', label: '登录方式', path: '/admin/login-methods', icon: KeyOutlined },
   { key: 'admin-apps', label: '应用管理', path: '/admin/app', icon: AppstoreOutlined },
   { key: 'admin-featured', label: '精选审批', path: '/admin/featured-applications', icon: StarOutlined },
   { key: 'admin-tags', label: '标签管理', path: '/admin/tags', icon: TagsOutlined },
   { key: 'admin-usage', label: '用量统计', path: '/admin/usage', icon: BarChartOutlined },
   { key: 'admin-invites', label: '邀请码管理', path: '/admin/invites', icon: GiftOutlined },
   { key: 'admin-redeems', label: '兑换码管理', path: '/admin/redeem', icon: BookOutlined },
+  { key: 'admin-announcements', label: '公告管理', path: '/admin/announcements', icon: NotificationOutlined },
+  { key: 'admin-system-config', label: '系统配置', path: '/admin/system-config', icon: SettingOutlined },
 ]
 
 const activeKey = computed(() => {
@@ -33,8 +38,10 @@ function navigate(path: string) {
     <!-- Top Bar -->
     <header class="admin-header">
       <div class="header-left">
-        <span class="header-logo">&lt;/&gt;</span>
-        <span class="header-title">CodeFreex</span>
+        <a class="header-brand" title="返回首页" @click="router.push('/')">
+          <span class="header-logo">&lt;/&gt;</span>
+          <span class="header-title">CodeFreex</span>
+        </a>
         <span class="header-badge">Admin</span>
       </div>
       <div class="header-right">
@@ -93,6 +100,14 @@ function navigate(path: string) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .header-logo {

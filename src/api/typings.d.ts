@@ -36,26 +36,8 @@ declare namespace API {
     phone?: string
     nickname?: string
     avatar?: string
-    tenantId?: string
     roles?: string[]
     permissions?: string[]
-  }
-
-  type WechatQrCodeResponse = {
-    qrcodeId?: string
-    qrCodeUrl?: string
-    status?: string
-    ticket?: string
-    displayName?: string
-    photo?: string
-  }
-
-  type WechatLoginResponse = {
-    newUser?: boolean
-    tempToken?: string
-    token?: TokenResponse
-    nickname?: string
-    avatar?: string
   }
 
   // === App ===
@@ -185,14 +167,18 @@ declare namespace API {
     updateTime?: string
   }
 
-  // === User ===
+  // === User（个人中心：身份来自 auth-service，码点来自本地业务表） ===
   type UserInfo = {
-    id?: string
     userId?: string
-    inviterId?: string
+    username?: string
     nickname?: string
     avatar?: string
-    status?: string
+    email?: string
+    emailVerified?: boolean
+    phone?: string
+    phoneVerified?: boolean
+    roles?: string[]
+    inviterId?: string
     totalCredits?: number
     remainingCredits?: number
     createTime?: string
@@ -201,22 +187,116 @@ declare namespace API {
 
   type AdminUserVO = {
     userId?: string
+    username?: string
     nickname?: string
     avatar?: string
     email?: string
     phone?: string
     roles?: string[]
-    status?: string
+    /** 1-正常，0-禁用（auth-service） */
+    status?: number
     totalCredits?: number
     remainingCredits?: number
     createTime?: string
+    /** 已绑定的第三方平台（gitee / github） */
+    oauthProviders?: string[]
   }
 
   type UserQueryRequest = {
     pageNum?: number
     pageSize?: number
     searchKey?: string
-    status?: string
+    status?: number
+  }
+
+  type UserAdminCreateRequest = {
+    username: string
+    password: string
+    nickname?: string
+    email?: string
+    roleIds?: string[]
+  }
+
+  type UserAdminUpdateRequest = {
+    userId: string
+    username?: string
+    password?: string
+    email?: string
+    phone?: string
+    nickname?: string
+    avatar?: string
+    status?: number
+  }
+
+  // === 角色 / 权限（auth-service RPC） ===
+  type RoleVO = {
+    id?: string
+    code?: string
+    name?: string
+    description?: string
+    status?: number
+    permissions?: string[]
+    builtIn?: boolean
+  }
+
+  type RoleSaveRequest = {
+    id?: string
+    code?: string
+    name: string
+    description?: string
+  }
+
+  type PermissionVO = {
+    id?: string
+    code?: string
+    name?: string
+    resource?: string
+    action?: string
+    description?: string
+  }
+
+  type PermissionSaveRequest = {
+    code: string
+    name: string
+    resource?: string
+    action?: string
+    description?: string
+  }
+
+  // === 登录方式配置（租户级） ===
+  type LoginMethodConfigVO = {
+    method?: string
+    category?: string
+    displayName?: string
+    enabled?: number
+    usePlatformConfig?: number
+    hasConfig?: boolean
+    platformEnabled?: boolean
+  }
+
+  type LoginMethodSaveRequest = {
+    method: string
+    enabled: number
+    usePlatformConfig?: number
+    configJson?: string
+  }
+
+  // === 账号绑定（auth-service RPC） ===
+  type OAuthBinding = {
+    provider?: string
+    providerUid?: string
+    createTime?: string
+  }
+
+  type AccountBindings = {
+    email?: string
+    emailVerified?: boolean
+    phone?: string
+    phoneVerified?: boolean
+    emailBindable?: boolean
+    phoneBindable?: boolean
+    emailBindMethod?: string
+    oauthBindings?: OAuthBinding[]
   }
 
   // === Chat History ===
@@ -333,5 +413,43 @@ declare namespace API {
     message: string | null
     updateTime: string
     cachedEventCount: number
+  }
+
+  // === SystemConfig ===
+  type SystemConfigItem = {
+    key?: string
+    label?: string
+    value?: string
+    valueType?: 'STRING' | 'INT' | 'DOUBLE' | 'BOOLEAN'
+    sensitive?: boolean
+    description?: string
+    defaultValue?: string
+  }
+
+  type SystemConfigGroup = {
+    group?: string
+    groupName?: string
+    items?: SystemConfigItem[]
+  }
+
+  // === Announcement ===
+  type Announcement = {
+    id?: string
+    title?: string
+    content?: string
+    status?: string // draft / published / offline
+    publishTime?: string
+    createTime?: string
+    updateTime?: string
+  }
+
+  // === CreditConfig（码点计费价格，公开） ===
+  type CreditConfig = {
+    firstGenerateCost?: number
+    chatRoundCost?: number
+    inviteReward?: number
+    inviteCreateCostPerUse?: number
+    deployHourlyCost?: number
+    deployBillingIntervalMinutes?: number
   }
 }

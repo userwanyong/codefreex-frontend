@@ -6,6 +6,8 @@ import { CopyOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import { generateInvite, getMyInvites } from '@/api/inviteController'
 import { useUserStore } from '@/stores/userStore'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
+import { getCachedCreditConfig, loadCreditConfig } from '@/utils/creditConfig'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -20,7 +22,8 @@ const generateForm = ref({
   expireDays: 7,
   maxUseCount: 1,
 })
-const createCost = computed(() => generateForm.value.maxUseCount * 50)
+const creditConfig = ref(getCachedCreditConfig())
+const createCost = computed(() => generateForm.value.maxUseCount * (creditConfig.value.inviteCreateCostPerUse ?? 50))
 const remainingCredits = computed(() => userStore.userInfo?.remainingCredits ?? 0)
 const maxUseCountLimit = computed(() => (userStore.isAdmin ? undefined : 10))
 
@@ -87,6 +90,9 @@ function handlePageChange(page: number) {
 onMounted(() => {
   userStore.fetchUserInfo()
   loadInvites()
+  loadCreditConfig().then((config) => {
+    creditConfig.value = config
+  })
 })
 </script>
 
@@ -100,10 +106,10 @@ onMounted(() => {
     </div>
 
     <div class="reward-banner">
-      <div class="reward-icon">100</div>
+      <div class="reward-icon">{{ creditConfig.inviteReward ?? 100 }}</div>
       <div class="reward-content">
         <div class="reward-title">邀请好友一起获得码点</div>
-        <div class="reward-desc">对方使用您的邀请码进行注册，双方均可获得100码点。</div>
+        <div class="reward-desc">对方使用您的邀请码进行注册，双方均可获得{{ creditConfig.inviteReward ?? 100 }}码点。</div>
       </div>
     </div>
 
@@ -134,7 +140,9 @@ onMounted(() => {
           <span>{{ record.usedCount ?? 0 }} / {{ record.maxUseCount ?? 1 }}</span>
         </template>
       </a-table-column>
-      <a-table-column title="创建时间" data-index="createTime" width="180" />
+      <a-table-column title="创建时间" data-index="createTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+      </a-table-column>
       <a-table-column title="操作" width="100">
         <template #default="{ record }">
           <a-button type="link" size="small" @click="router.push(`/invite/${record.id}`)">详情</a-button>
@@ -172,7 +180,7 @@ onMounted(() => {
             style="width: 100%"
           />
           <div class="form-hint">
-            {{ userStore.isAdmin ? '管理员不限制使用次数' : '普通用户最多使用10次，每次消耗50码点' }}
+            {{ userStore.isAdmin ? '管理员不限制使用次数' : `普通用户最多使用10次，每次消耗${creditConfig.inviteCreateCostPerUse ?? 50}码点` }}
           </div>
         </a-form-item>
         <a-alert

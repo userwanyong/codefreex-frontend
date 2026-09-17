@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router'
 import { EyeOutlined, LikeOutlined, LikeFilled, ArrowRightOutlined, ThunderboltOutlined, CodeOutlined, RocketOutlined, BulbOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { getFeaturedApps, getFeaturedTags, createApp, likeApp } from '@/api/appController'
 import { optimizePrompt } from '@/api/aiController'
+import { getActiveAnnouncement, ackAnnouncement } from '@/api/announcementController'
 import { parseResponseData } from '@/utils/response'
 import { useUserStore } from '@/stores/userStore'
 import { message } from 'ant-design-vue'
 import FlowBackground from '@/components/FlowBackground.vue'
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -221,9 +223,39 @@ async function handleLike(app: API.AppVO, e: Event) {
   }
 }
 
+// 公告弹窗：进入首页时拉取当前生效公告，登录用户可选择“不再弹出”
+const announcement = ref<API.Announcement | null>(null)
+const announcementVisible = ref(false)
+const announcementDontShowAgain = ref(false)
+
+async function loadAnnouncement() {
+  try {
+    const res = await getActiveAnnouncement()
+    if (res.data?.code === 0 && res.data.data) {
+      announcement.value = parseResponseData<API.Announcement>(res.data.data)
+      announcementVisible.value = true
+    }
+  } catch {
+    // 公告拉取失败不影响首页
+  }
+}
+
+async function handleAnnouncementClose() {
+  const id = announcement.value?.id
+  if (announcementDontShowAgain.value && userStore.isLoggedIn && id) {
+    try {
+      await ackAnnouncement(id)
+    } catch {
+      // 确认失败下次仍会弹出，可接受
+    }
+  }
+  announcementVisible.value = false
+}
+
 onMounted(() => {
   loadApps()
   loadTags()
+  loadAnnouncement()
 })
 </script>
 
@@ -394,6 +426,27 @@ onMounted(() => {
         </a-button>
       </div>
     </section>
+
+    <!-- 公告弹窗 -->
+    <a-modal
+      v-model:open="announcementVisible"
+      :title="announcement?.title || '公告'"
+      :width="640"
+      :footer="null"
+      class="announcement-modal"
+      @cancel="announcementVisible = false"
+    >
+      <div class="announcement-content">
+        <MarkdownRenderer v-if="announcement?.content" :content="announcement.content" />
+        <p v-else class="announcement-empty">{{ announcement?.title }}</p>
+      </div>
+      <div class="announcement-footer">
+        <a-checkbox v-if="userStore.isLoggedIn" v-model:checked="announcementDontShowAgain">
+          我已知晓，不再显示此公告
+        </a-checkbox>
+        <a-button type="primary" @click="handleAnnouncementClose">我知道了</a-button>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -900,5 +953,27 @@ onMounted(() => {
   .hero-examples {
     gap: var(--space-2);
   }
+}
+
+/* 公告弹窗 */
+.announcement-content {
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 4px 4px 12px;
+}
+
+.announcement-empty {
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 24px 0;
+}
+
+.announcement-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 14px;
 }
 </style>

@@ -4,6 +4,7 @@ import { message } from 'ant-design-vue'
 import { PlusOutlined, CopyOutlined } from '@ant-design/icons-vue'
 import { generateRedeem, getRedeemList, getRedeemUsers } from '@/api/redeemController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 const redeems = ref<API.Redeem[]>([])
 const loading = ref(true)
@@ -157,8 +158,12 @@ function copyCode(code: string) {
         </template>
       </a-table-column>
       <a-table-column title="批次" data-index="batch" width="120" />
-      <a-table-column title="过期时间" data-index="expireTime" width="180" />
-      <a-table-column title="创建时间" data-index="createTime" width="180" />
+      <a-table-column title="过期时间" data-index="expireTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.expireTime) }}</template>
+      </a-table-column>
+      <a-table-column title="创建时间" data-index="createTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+      </a-table-column>
       <a-table-column title="操作" width="100">
         <template #default="{ record }">
           <a-button type="link" size="small" @click="showDetail(record)">详情</a-button>
@@ -227,7 +232,9 @@ function copyCode(code: string) {
       >
         <a-table-column title="使用用户 ID" data-index="userId" />
         <a-table-column title="创建人 ID" data-index="creatorId" />
-        <a-table-column title="使用时间" data-index="createTime" />
+        <a-table-column title="使用时间" data-index="createTime">
+          <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+        </a-table-column>
       </a-table>
     </a-modal>
   </div>

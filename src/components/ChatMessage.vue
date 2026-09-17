@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RobotOutlined, UserOutlined, LoadingOutlined, RedoOutlined, DownloadOutlined } from '@ant-design/icons-vue'
+import { RobotOutlined, UserOutlined, LoadingOutlined, RedoOutlined, DownloadOutlined, EditOutlined } from '@ant-design/icons-vue'
 import MarkdownRenderer from './MarkdownRenderer.vue'
+import { formatDateTime } from '@/utils/datetime'
+import { useUserStore } from '@/stores/userStore'
 
 interface StatusItem {
   icon: string
@@ -34,11 +36,26 @@ const isUser = computed(() => props.message.role === 'user')
 const isStreaming = computed(() => props.message.status === 'streaming')
 const isError = computed(() => props.message.status === 'error')
 const hasStatusItems = computed(() => !!(props.message.statusItems && props.message.statusItems.length))
+const userStore = useUserStore()
+const userInitial = computed(() => userStore.nickname?.charAt(0)?.toUpperCase() || '')
+
+/**
+ * 可视化编辑消息（存储格式以 [可视化编辑] 开头，含给 AI 的元素上下文）。
+ * 用户只关心自己的指令，解析出指令以"已选中元素"标签形式展示；
+ * 解析失败返回 null，安全退回原文展示。
+ */
+const visualEditInstruction = computed<string | null>(() => {
+  const content = props.message.content
+  if (!isUser.value || !content.startsWith('[可视化编辑]')) return null
+  const marker = '用户指令: '
+  const idx = content.lastIndexOf(marker)
+  if (idx === -1) return null
+  const instruction = content.slice(idx + marker.length).trim()
+  return instruction || null
+})
 
 function formatTime(ts: number) {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return formatDateTime(ts)
 }
 </script>
 
@@ -75,7 +92,11 @@ function formatTime(ts: number) {
       <!-- Normal content -->
       <div v-else class="msg-content" :class="{ 'content-streaming': isStreaming, 'content-error': isError }">
         <template v-if="isUser">
-          {{ message.content }}
+          <template v-if="visualEditInstruction !== null">
+            <span class="ve-tag"><EditOutlined /> 已选中元素</span>
+            <span class="ve-instruction">{{ visualEditInstruction }}</span>
+          </template>
+          <template v-else>{{ message.content }}</template>
         </template>
         <template v-else-if="isStreaming && !message.content">
           <LoadingOutlined class="streaming-icon" />
@@ -94,9 +115,11 @@ function formatTime(ts: number) {
       </div>
     </div>
 
-    <!-- User: avatar on right -->
+    <!-- User: avatar on right（优先用户资料头像，无头像回退昵称首字，再回退默认图标） -->
     <div v-if="isUser" class="msg-avatar">
-      <UserOutlined />
+      <a-avatar v-if="userStore.avatar" :src="userStore.avatar" :size="36" class="user-avatar-img" />
+      <span v-else-if="userInitial" class="avatar-initial">{{ userInitial }}</span>
+      <UserOutlined v-else />
     </div>
   </div>
 </template>
@@ -149,6 +172,35 @@ function formatTime(ts: number) {
 .msg-user .msg-avatar {
   background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   color: white;
+}
+
+.msg-user .msg-avatar .user-avatar-img {
+  margin: -2px; /* 抵消头像图片与容器间的视觉缝隙，使图片铺满圆形容器 */
+}
+
+.msg-user .msg-avatar .avatar-initial {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* 可视化编辑消息：已选中元素标签 + 用户指令 */
+.ve-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  margin-bottom: 8px;
+  background: #e6f4ff;
+  color: #1890ff;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.ve-instruction {
+  display: block;
 }
 
 .msg-ai .msg-avatar,
@@ -213,6 +265,7 @@ function formatTime(ts: number) {
   border: 1px solid rgba(59, 130, 246, 0.2);
   color: var(--text-primary);
   border-top-right-radius: 4px;
+  white-space: pre-wrap;
 }
 
 :global(html[data-theme="light"] .chat-msg.msg-user .msg-content) {

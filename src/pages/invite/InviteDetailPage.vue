@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getInviteUsers } from '@/api/inviteController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 const route = useRoute()
 const users = ref<API.InviteUser[]>([])
@@ -44,7 +45,9 @@ onMounted(() => loadUsers())
       row-key="id"
     >
       <a-table-column title="被邀请人ID" data-index="inviteeId" />
-      <a-table-column title="邀请时间" data-index="createTime" width="180" />
+      <a-table-column title="邀请时间" data-index="createTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+      </a-table-column>
     </a-table>
   </div>
 </template>

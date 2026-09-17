@@ -4,6 +4,7 @@ import { message } from 'ant-design-vue'
 import { CopyOutlined } from '@ant-design/icons-vue'
 import { getAdminInvites } from '@/api/inviteController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 const invites = ref<API.Invite[]>([])
 const loading = ref(true)
@@ -103,8 +104,12 @@ function copyCode(code: string) {
           <span>{{ record.usedCount ?? 0 }} / {{ record.maxUseCount ?? 1 }}</span>
         </template>
       </a-table-column>
-      <a-table-column title="过期时间" data-index="expireTime" width="180" />
-      <a-table-column title="创建时间" data-index="createTime" width="180" />
+      <a-table-column title="过期时间" data-index="expireTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.expireTime) }}</template>
+      </a-table-column>
+      <a-table-column title="创建时间" data-index="createTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+      </a-table-column>
     </a-table>
 
     <div class="pagination-wrapper">

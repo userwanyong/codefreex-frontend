@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { listUsageStats } from '@/api/usageController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 const usages = ref<API.UserUsage[]>([])
 const loading = ref(true)
@@ -135,7 +136,9 @@ onMounted(() => loadUsages())
           <span>{{ record.errorInfo || '-' }}</span>
         </template>
       </a-table-column>
-      <a-table-column title="时间" data-index="createTime" width="180" />
+      <a-table-column title="时间" data-index="createTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+      </a-table-column>
     </a-table>
 
     <div class="pagination-wrapper">

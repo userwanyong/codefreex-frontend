@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { StarOutlined, StarFilled, RocketOutlined } from '@ant-design/icons-vue'
 import { getAdminApps, setAppFeatured } from '@/api/appController'
 import { parseResponseData } from '@/utils/response'
+import { formatDateTime } from '@/utils/datetime'
 
 const router = useRouter()
 const apps = ref<API.AppVO[]>([])
@@ -131,7 +132,9 @@ onMounted(() => loadApps())
       <a-table-column title="作者ID" data-index="userId" width="140" ellipsis />
       <a-table-column title="浏览" data-index="viewCount" width="80" />
       <a-table-column title="点赞" data-index="likeCount" width="80" />
-      <a-table-column title="创建时间" data-index="createTime" width="180" />
+      <a-table-column title="创建时间" data-index="createTime" width="180">
+        <template #default="{ record }">{{ formatDateTime(record.createTime) }}</template>
+      </a-table-column>
       <a-table-column title="操作" width="160">
         <template #default="{ record }">
           <a-space>

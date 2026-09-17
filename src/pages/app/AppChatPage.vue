@@ -20,6 +20,7 @@ import { getApp, deployApp, cancelDeploy, downloadApp, getAppCode } from '@/api/
 import { streamWorkflowGenerate, getChatHistory, getWorkflowStatus, reconnectWorkflow } from '@/api/aiController'
 import { parseResponseData } from '@/utils/response'
 import { parseCodeFiles } from '@/utils/codeFileParser'
+import { loadCreditConfig } from '@/utils/creditConfig'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CodeFilesPanel from '@/components/CodeFilesPanel.vue'
 import WorkflowProgress from '@/components/WorkflowProgress.vue'
@@ -75,6 +76,8 @@ const codeContent = ref('')
 const prdContent = ref('')
 const historyPrdContent = ref('')
 const fileCodeContent = ref('')
+/** 历史中存在已完成的生成（persistNode 标记）：true=修改已有项目场景，false=初次生成中 */
+const hasCompletedGeneration = ref(false)
 
 const NODE_DESCRIPTIONS: Record<string, string> = {
   promptGuardNode: '关键词安全检查中...',
@@ -136,12 +139,10 @@ const rightView = ref<'code' | 'preview'>('code')
 const currentAIContent = computed(() => {
   // 生成完成后：优先使用 API 返回的磁盘文件内容（更准确）
   if (!sending.value) return fileCodeContent.value || codeContent.value || ''
-  // 流式生成中：如果 codeContent 能解析出文件，优先用它（正常流式或完整回放）
-  // 否则 fallback 到磁盘文件（回放不完整时，codeContent 缺少代码块开头标记）
-  if (codeContent.value && parseCodeFiles(codeContent.value).length > 0) {
-    return codeContent.value
-  }
-  return fileCodeContent.value || codeContent.value || ''
+  // 流式生成中：磁盘文件优先（Vue 增量落盘实时可读），避免模型收尾总结被误解析为
+  // 伪文件（如 file.txt）混入文件树；首次生成尚未落盘时回退到流式内容保留打字效果
+  if (fileCodeContent.value) return fileCodeContent.value
+  return codeContent.value || ''
 })
 
 const statusLabel = computed(() => {
@@ -176,7 +177,8 @@ async function tryReconnect() {
     currentNode.value = status.currentNode as API.WorkflowNode || null
     retryCount.value = status.retryCount || 0
     codeContent.value = ''
-    rightView.value = 'code'
+    // 历史存在完成标记（修改/迭代场景）且磁盘有文件时保持预览；初次生成重连展示代码流式面板
+    rightView.value = fileCodeContent.value && hasCompletedGeneration.value ? 'preview' : 'code'
 
     // 复用已有的最后一条 AI 消息，避免与历史记录重复显示
     let statusMsg: ChatMsg | null = null
@@ -313,7 +315,8 @@ async function tryReconnect() {
             } else if (node === 'buildNode') {
               const step = nodeData?.step
               const isDone = nodeData?.result === 'success'
-              const buildItem = { icon: '📦', label: '项目构建', status: (isDone ? 'done' : 'running') as StatusItem['status'], detail: isDone ? '构建完成' : step === 'npm_build' ? '打包中...' : step === 'npm_install' ? '安装依赖...' : '构建中...', nodeKey: 'buildNode' }
+              const isFailed = nodeData?.result === 'failed'
+              const buildItem = { icon: '📦', label: '项目构建', status: (isDone ? 'done' : isFailed ? 'error' : 'running') as StatusItem['status'], detail: isDone ? '构建完成' : isFailed ? (msg || '构建失败，自动修复中') : step === 'npm_build' ? '打包中...' : step === 'npm_install' ? '安装依赖...' : '构建中...', nodeKey: 'buildNode' }
               const qcIdx = statusItems.findIndex(it => it.nodeKey === 'qualityCheckNode')
               if (qcIdx >= 0) statusItems.splice(qcIdx, 0, buildItem)
               else statusItems.push(buildItem)
@@ -365,6 +368,9 @@ async function tryReconnect() {
             codeContent.value += event.data
             if (!codeStatusAdded) {
               codeStatusAdded = true
+              // 流式代码开始输出 = 初次生成场景，切到代码面板观看生成过程；
+              // 修改/迭代为工具调用模式无 ai_r 事件，保持预览视图不受影响
+              rightView.value = 'code'
               const cgIdx = statusItems.findIndex(it => it.nodeKey === 'codeGenNode')
               if (cgIdx >= 0) statusItems.splice(cgIdx, 1)
               if (!isVisualEditMode) {
@@ -405,7 +411,6 @@ async function tryReconnect() {
         sending.value = false
         currentNode.value = null
         currentAbortController = null
-        appStatus.value = 'generated'
         loadAppCode()
         refreshAppInfo()
         scrollToBottom()
@@ -462,6 +467,15 @@ async function loadApp() {
       // 加载历史对话
       await loadChatHistory()
 
+      // 是否存在已完成的生成（持久化标记）：区分"修改已有项目"与"初次生成中"。
+      // 初次生成是流式增量落盘，生成中磁盘也有半成品文件，不能仅凭文件存在判定可预览。
+      // 注意：历史分组会把 STATUS 标记转成 statusItems 并清空 content，两处都要检查
+      hasCompletedGeneration.value = messages.value.some((m) => {
+        if (m.role !== 'ai') return false
+        if (m.statusItems?.some((it) => it.label === '生成完成' || it.label === '修改完成')) return true
+        return typeof m.content === 'string' && (m.content.includes('生成完成') || m.content.includes('修改完成'))
+      })
+
       // 从文件 API 加载代码内容
       await loadAppCode()
 
@@ -497,7 +511,7 @@ async function loadAppCode() {
     if (res.data?.code === 0 && res.data.data) {
       fileCodeContent.value = res.data.data
       // 只有不在流式生成中时才切到预览
-      if (fileCodeContent.value && !sending.value) rightView.value = 'preview'
+      if (fileCodeContent.value && !sending.value && hasCompletedGeneration.value) rightView.value = 'preview'
     }
   } catch { /* ignore */ }
 }
@@ -652,13 +666,14 @@ function scrollToBottom() {
 async function sendToAI(text: string) {
   if (currentAbortController) { currentAbortController.abort(); currentAbortController = null }
 
-  // 余额检查（首次生成已在创建应用时扣减50码点，这里只检查后续对话的10码点）
+  // 余额检查（首次生成已在创建应用时扣减，这里只检查后续对话轮次；消耗数由系统配置决定）
   const userStore = useUserStore()
-  await userStore.fetchUserInfo()
+  const [creditConfig] = await Promise.all([loadCreditConfig(), userStore.fetchUserInfo()])
   const remaining = userStore.userInfo?.remainingCredits ?? 0
   const isFirst = messages.value.length === 0
-  if (!isFirst && remaining < 10) {
-    message.error('码点不足，对话需要 10 码点，请先兑换码点')
+  const chatRoundCost = creditConfig.chatRoundCost ?? 10
+  if (!isFirst && remaining < chatRoundCost) {
+    message.error(`码点不足，对话需要 ${chatRoundCost} 码点，请先兑换码点`)
     return
   }
 
@@ -927,7 +942,6 @@ async function sendToAI(text: string) {
       sending.value = false
       currentNode.value = null
       currentAbortController = null
-      appStatus.value = 'generated'
       loadAppCode()
       refreshAppInfo()
       scrollToBottom()
@@ -938,12 +952,23 @@ async function sendToAI(text: string) {
     onError(err) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0 }
 
-      // 限流错误：显示友好提示，不显示"生成失败"状态
+      // 限流错误（自家并发限流或上游 AI 服务 qpm 限流）：友好展示并终止运行中节点
       const errText = typeof err === 'string' ? err : ''
-      if (errText.includes('请求过于频繁')) {
-        message.warning(errText)
+      if (errText.includes('请求过于频繁') || errText.includes('RateLimitExceeded')) {
+        let friendly = 'AI 服务繁忙，请稍后重试'
+        try {
+          const parsed = JSON.parse(errText) as { message?: string }
+          if (parsed?.message) friendly = parsed.message
+        } catch { /* 非 JSON（自家限流纯文本）则直接使用 */ }
+        if (errText && !errText.startsWith('{')) friendly = errText
+        message.warning(friendly)
         const target = messages.value.find((m) => m.id === statusMsgId)
-        if (target) target.status = 'done'
+        if (target) {
+          statusItems.forEach(it => { if (it.status === 'running') it.status = 'error' })
+          statusItems.push({ icon: '⚠️', label: 'AI 服务繁忙', detail: '请求触发限流，请稍后重试', status: 'warning' })
+          target.statusItems = [...statusItems]
+          target.status = 'error'
+        }
         sending.value = false
         currentNode.value = null
         currentAbortController = null
@@ -985,10 +1010,10 @@ async function handleSend() {
   inputText.value = ''
 
   if (editSelector.value) {
-    const selector = editSelector.value
     const ctx = editContext.value
     const fullText = `[可视化编辑]\n${ctx}\n\n用户指令: ${text}`
-    addMessage('user', `[编辑] 目标元素: ${selector}\n${text}`, 'done')
+    // 本地展示与数据库持久化使用同一份内容，展示层统一渲染为"已选中元素"标签+指令
+    addMessage('user', fullText, 'done')
     editSelector.value = ''
     editContext.value = ''
     await sendToAI(fullText)
@@ -1180,11 +1205,26 @@ function resolveElement(e: MouseEvent) {
   const y = e.clientY - rect.top
 
   overlay.style.pointerEvents = 'none'
-  const el = iframe.contentDocument.elementFromPoint(x, y) as HTMLElement | null
+  let el = iframe.contentDocument.elementFromPoint(x, y) as HTMLElement | null
   overlay.style.pointerEvents = 'auto'
 
-  if (!el || el === iframe.contentDocument.body || el === iframe.contentDocument.documentElement) return null
+  if (!el) return null
+  // 点击空白处命中 body/html 时，回退到页面最外层内容容器，保证"最外层"可被选中
+  if (el === iframe.contentDocument.body || el === iframe.contentDocument.documentElement) {
+    const outer = iframe.contentDocument.body.firstElementChild as HTMLElement | null
+    if (!outer || /^(script|style|link|meta)$/i.test(outer.tagName)) return null
+    el = outer
+  }
   return { el, iframe }
+}
+
+/** 编辑模式下覆盖层拦截了滚轮事件，需要手动转发给 iframe，否则长页面底部元素无法滚到可视区 */
+function handleEditOverlayWheel(e: WheelEvent) {
+  if (!editMode.value) return
+  const overlay = e.currentTarget as HTMLElement
+  const iframe = overlay.previousElementSibling as HTMLIFrameElement
+  if (!iframe?.contentWindow) return
+  iframe.contentWindow.scrollBy({ top: e.deltaY, left: e.deltaX })
 }
 
 function handleEditOverlayMove(e: MouseEvent) {
@@ -1333,7 +1373,7 @@ onUnmounted(() => {
           <button class="switch-btn" :class="{ active: rightView === 'code' }" @click="rightView = 'code'">
             <CodeOutlined /> 代码
           </button>
-          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'" :disabled="!deployKey || sending">
+          <button class="switch-btn" :class="{ active: rightView === 'preview' }" @click="rightView = 'preview'" :disabled="!deployKey || (sending && !fileCodeContent)">
             <EyeOutlined /> 预览
           </button>
         </div>
@@ -1455,6 +1495,7 @@ onUnmounted(() => {
               class="edit-overlay"
               @mousemove="handleEditOverlayMove"
               @click="handleEditOverlayClick"
+              @wheel.prevent="handleEditOverlayWheel"
             />
             <div v-else class="preview-loading">
               <div class="loading-spinner" />
@@ -1913,7 +1954,7 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 80px; /* leave space for instruction bar */
+  bottom: 0;
   cursor: crosshair;
   z-index: 5;
 }
