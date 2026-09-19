@@ -92,6 +92,7 @@ const NODE_DESCRIPTIONS: Record<string, string> = {
   buildNode: '项目构建打包中...',
   qualityCheckNode: '质量验证中...',
   persistNode: '保存文件中...',
+  normalEditNode: 'AI 执行修改中...',
   chatDirectNode: 'AI 思考回复中...',
 }
 
@@ -106,6 +107,7 @@ const NODE_LABELS: Record<string, { icon: string; label: string }> = {
   codeGenNode: { icon: '💻', label: '编写代码' },
   buildNode: { icon: '📦', label: '项目构建' },
   visualEditNode: { icon: '🎨', label: '执行修改' },
+  normalEditNode: { icon: '✏️', label: '执行修改' },
   qualityCheckNode: { icon: '🔍', label: '代码质量检查' },
   codeFixNode: { icon: '🔧', label: '修复代码' },
   persistNode: { icon: '✅', label: '生成完成' },
@@ -201,6 +203,7 @@ async function tryReconnect() {
     let codeStatusAdded = false
     let isChatMode = false
     let isVisualEditMode = false
+    let isNormalEditMode = false
     let chatMsgCreated = false
     let chatMsgId = ''
     let buffer = ''
@@ -271,13 +274,20 @@ async function tryReconnect() {
             if (node === 'intentClassifyNode' && msg) {
               const isCoding = msg.includes('编码')
               const isVisualEdit = msg.includes('可视化编辑')
-              const isChat = !isCoding && !isVisualEdit
-              statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : isVisualEdit ? '可视化编辑' : '普通对话' })
+              const isNormalEdit = msg.includes('普通编辑')
+              const isChat = !isCoding && !isVisualEdit && !isNormalEdit
+              statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : isVisualEdit ? '可视化编辑' : isNormalEdit ? '普通编辑' : '普通对话' })
               if (isChat) isChatMode = true
               if (isVisualEdit) isVisualEditMode = true
+              if (isNormalEdit) isNormalEditMode = true
               if (isVisualEdit) {
                 const veCfg = NODE_LABELS['visualEditNode']
                 if (veCfg) statusItems.push({ icon: veCfg.icon, label: veCfg.label, status: 'running', nodeKey: 'visualEditNode' })
+                syncStatus()
+              }
+              if (isNormalEdit) {
+                const neCfg = NODE_LABELS['normalEditNode']
+                if (neCfg) statusItems.push({ icon: neCfg.icon, label: neCfg.label, status: 'running', nodeKey: 'normalEditNode' })
                 syncStatus()
               }
               if (isCoding) {
@@ -292,6 +302,15 @@ async function tryReconnect() {
               const veDoneItem: StatusItem = { icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' }
               if (buildIdx >= 0) statusItems.splice(buildIdx, 0, veDoneItem)
               else statusItems.push(veDoneItem)
+              if (!isChatMode) {
+                const qcCfg = NODE_LABELS['qualityCheckNode']
+                if (qcCfg) statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+              }
+            } else if (node === 'normalEditNode') {
+              const buildIdx = statusItems.findIndex(it => it.nodeKey === 'buildNode')
+              const neDoneItem: StatusItem = { icon: '✏️', label: '执行修改', status: 'done', detail: '已完成' }
+              if (buildIdx >= 0) statusItems.splice(buildIdx, 0, neDoneItem)
+              else statusItems.push(neDoneItem)
               if (!isChatMode) {
                 const qcCfg = NODE_LABELS['qualityCheckNode']
                 if (qcCfg) statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
@@ -325,7 +344,7 @@ async function tryReconnect() {
               statusItems.push({ icon: '🔍', label: '代码质量检查', status: passed ? 'done' : 'warning', detail: passed ? '通过' : nodeData?.reason || '未通过' })
               if (!isChatMode) {
                 if (passed) {
-                  statusItems.push({ icon: '✅', label: isVisualEditMode ? '修改完成' : '生成完成', status: 'done', detail: '已完成' })
+                  statusItems.push({ icon: '✅', label: isVisualEditMode || isNormalEditMode ? '修改完成' : '生成完成', status: 'done', detail: '已完成' })
                 } else {
                   const fixCfg = NODE_LABELS['codeFixNode']
                   if (fixCfg) statusItems.push({ icon: fixCfg.icon, label: fixCfg.label, status: 'running', nodeKey: 'codeFixNode' })
@@ -373,7 +392,7 @@ async function tryReconnect() {
               rightView.value = 'code'
               const cgIdx = statusItems.findIndex(it => it.nodeKey === 'codeGenNode')
               if (cgIdx >= 0) statusItems.splice(cgIdx, 1)
-              if (!isVisualEditMode) {
+              if (!isVisualEditMode && !isNormalEditMode) {
                 statusItems.push({ icon: '💻', label: '编写代码', status: 'running', nodeKey: 'codeWriting' })
                 syncStatus()
               }
@@ -690,6 +709,7 @@ async function sendToAI(text: string) {
   let codeStatusAdded = false
   let isChatMode = false
   let isVisualEditMode = false
+  let isNormalEditMode = false
 
   // 对话模式：第二个气泡（文本回复）
   let chatMsgCreated = false
@@ -767,19 +787,31 @@ async function sendToAI(text: string) {
           if (node === 'intentClassifyNode' && msg) {
             const isCoding = msg.includes('编码')
             const isVisualEdit = msg.includes('可视化编辑')
-            const isChat = !isCoding && !isVisualEdit
-            statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : isVisualEdit ? '可视化编辑' : '普通对话' })
+            const isNormalEdit = msg.includes('普通编辑')
+            const isChat = !isCoding && !isVisualEdit && !isNormalEdit
+            statusItems.push({ icon: '🔍', label: '分析用户意图', status: 'done', detail: isCoding ? '开发任务' : isVisualEdit ? '可视化编辑' : isNormalEdit ? '普通编辑' : '普通对话' })
             if (isChat) {
               isChatMode = true
             }
             if (isVisualEdit) {
               isVisualEditMode = true
             }
+            if (isNormalEdit) {
+              isNormalEditMode = true
+            }
             // 可视化编辑意图：直接预显示 visualEditNode
             if (isVisualEdit) {
               const veCfg = NODE_LABELS['visualEditNode']
               if (veCfg) {
                 statusItems.push({ icon: veCfg.icon, label: veCfg.label, status: 'running', nodeKey: 'visualEditNode' })
+              }
+              syncStatus()
+            }
+            // 普通编辑意图：直接预显示 normalEditNode
+            if (isNormalEdit) {
+              const neCfg = NODE_LABELS['normalEditNode']
+              if (neCfg) {
+                statusItems.push({ icon: neCfg.icon, label: neCfg.label, status: 'running', nodeKey: 'normalEditNode' })
               }
               syncStatus()
             }
@@ -791,23 +823,39 @@ async function sendToAI(text: string) {
               }
               syncStatus()
             }
-          } else if (node === 'visualEditNode') {
-            // 插入到 buildNode 之前，保证"执行修改"在"项目构建"前面
-            const buildIdx = statusItems.findIndex(it => it.nodeKey === 'buildNode')
-            const veDoneItem: StatusItem = { icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' }
-            if (buildIdx >= 0) {
-              statusItems.splice(buildIdx, 0, veDoneItem)
-            } else {
-              statusItems.push(veDoneItem)
-            }
-            // 预显示 qualityCheckNode
-            if (!isChatMode) {
-              const qcCfg = NODE_LABELS['qualityCheckNode']
-              if (qcCfg) {
-                statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+            } else if (node === 'visualEditNode') {
+              // 插入到 buildNode 之前，保证"执行修改"在"项目构建"前面
+              const buildIdx = statusItems.findIndex(it => it.nodeKey === 'buildNode')
+              const veDoneItem: StatusItem = { icon: '🎨', label: '执行修改', status: 'done', detail: '已完成' }
+              if (buildIdx >= 0) {
+                statusItems.splice(buildIdx, 0, veDoneItem)
+              } else {
+                statusItems.push(veDoneItem)
               }
-            }
-          } else if (node === 'chatDirectNode') {
+              // 预显示 qualityCheckNode
+              if (!isChatMode) {
+                const qcCfg = NODE_LABELS['qualityCheckNode']
+                if (qcCfg) {
+                  statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+                }
+              }
+            } else if (node === 'normalEditNode') {
+              // 插入到 buildNode 之前，保证"执行修改"在"项目构建"前面
+              const buildIdx = statusItems.findIndex(it => it.nodeKey === 'buildNode')
+              const neDoneItem: StatusItem = { icon: '✏️', label: '执行修改', status: 'done', detail: '已完成' }
+              if (buildIdx >= 0) {
+                statusItems.splice(buildIdx, 0, neDoneItem)
+              } else {
+                statusItems.push(neDoneItem)
+              }
+              // 预显示 qualityCheckNode
+              if (!isChatMode) {
+                const qcCfg = NODE_LABELS['qualityCheckNode']
+                if (qcCfg) {
+                  statusItems.push({ icon: qcCfg.icon, label: qcCfg.label, status: 'running', nodeKey: 'qualityCheckNode' })
+                }
+              }
+            } else if (node === 'chatDirectNode') {
             // 对话模式不添加状态项
           } else if (node === 'prdGenNode' && msg) {
             prdContent.value = msg
@@ -841,7 +889,7 @@ async function sendToAI(text: string) {
             statusItems.push({ icon: '🔍', label: '代码质量检查', status: passed ? 'done' : 'warning', detail: passed ? '通过' : nodeData?.reason || '未通过' })
             if (!isChatMode) {
               if (passed) {
-                statusItems.push({ icon: '✅', label: isVisualEditMode ? '修改完成' : '生成完成', status: 'done', detail: '已完成' })
+                statusItems.push({ icon: '✅', label: isVisualEditMode || isNormalEditMode ? '修改完成' : '生成完成', status: 'done', detail: '已完成' })
               } else {
                 // 未通过 → 预显示 codeFixNode
                 const fixCfg = NODE_LABELS['codeFixNode']
@@ -898,8 +946,8 @@ async function sendToAI(text: string) {
             // 清理可能残留的 codeGenNode 预显示项
             const cgIdx = statusItems.findIndex(it => it.nodeKey === 'codeGenNode')
             if (cgIdx >= 0) statusItems.splice(cgIdx, 1)
-            // 可视化编辑模式不显示"编写代码"状态（已有"执行修改"状态）
-            if (!isVisualEditMode) {
+            // 编辑模式（可视化/普通）不显示"编写代码"状态（已有"执行修改"状态）
+            if (!isVisualEditMode && !isNormalEditMode) {
               statusItems.push({ icon: '💻', label: '编写代码', status: 'running', nodeKey: 'codeWriting' })
               syncStatus()
             }
@@ -1491,7 +1539,7 @@ onUnmounted(() => {
               :src="previewUrl"
               class="preview-iframe"
               :class="{ 'edit-mode': editMode }"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-same-origin allow-downloads allow-modals allow-fullscreen"
               frameborder="0"
               @load="previewLoading = false"
               @error="previewLoading = false"
