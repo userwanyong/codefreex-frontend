@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   SendOutlined,
@@ -1264,6 +1264,11 @@ async function refreshAppInfo() {
   } catch { /* ignore */ }
 }
 const previewKey = ref(0)
+// 预览 iframe 加载骨架：进入预览视图或刷新预览时显示，iframe load 后隐藏
+const previewLoading = ref(true)
+watch([rightView, previewKey], ([view]) => {
+  if (view === 'preview' && deployKey.value) previewLoading.value = true
+})
 
 // Deploy state
 const deploying = ref(false)
@@ -1488,7 +1493,23 @@ onUnmounted(() => {
               :class="{ 'edit-mode': editMode }"
               sandbox="allow-scripts allow-same-origin"
               frameborder="0"
+              @load="previewLoading = false"
+              @error="previewLoading = false"
             />
+            <!-- 预览 iframe 加载骨架 -->
+            <div v-if="deployKey && previewLoading" class="preview-skeleton">
+              <div class="sk-navbar">
+                <div class="sk-block sk-logo" />
+                <div class="sk-block sk-nav-item" v-for="i in 4" :key="i" />
+              </div>
+              <div class="sk-body">
+                <div class="sk-block sk-hero" />
+                <div class="sk-cards">
+                  <div class="sk-block sk-card" v-for="i in 6" :key="i" />
+                </div>
+              </div>
+              <p class="preview-skeleton-text">应用预览加载中...</p>
+            </div>
             <!-- 编辑模式覆盖层：拦截点击，定位 iframe 内元素 -->
             <div
               v-if="editMode && deployKey"
@@ -1946,6 +1967,68 @@ onUnmounted(() => {
 .preview-iframe.edit-mode {
   outline: 2px solid #1890ff;
   outline-offset: -2px;
+}
+
+/* Preview loading skeleton */
+.preview-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+.sk-block {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  animation: sk-pulse 1.4s ease-in-out infinite;
+}
+
+.sk-navbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 40px;
+  padding: 0 8px;
+}
+
+.sk-logo { width: 72px; height: 20px; }
+.sk-nav-item { width: 48px; height: 12px; margin-top: 4px; }
+
+.sk-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+  min-height: 0;
+}
+
+.sk-hero { height: 110px; width: 100%; }
+
+.sk-cards {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.sk-card { border-radius: 10px; }
+
+.preview-skeleton-text {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 12px 0 4px;
+}
+
+@keyframes sk-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
 /* Edit mode overlay */
