@@ -27,13 +27,11 @@ export function createSSEConnection(
   const query = buildQuery(params)
   const fullUrl = query ? `${url}?${query}` : url
 
-  console.log('[SSE] Connecting to:', fullUrl)
 
   const eventSource = new EventSource(fullUrl, { withCredentials: true })
 
   eventSource.onmessage = (event) => {
     if (event.data === '[DONE]') {
-      console.log('[SSE] Received [DONE]')
       callbacks.onDone()
       eventSource.close()
       return
@@ -42,7 +40,6 @@ export function createSSEConnection(
     try {
       const parsed = JSON.parse(event.data) as SSEMessageEvent
       if (parsed.type === 'done') {
-        console.log('[SSE] Received done event')
         callbacks.onDone()
         eventSource.close()
         return
@@ -53,10 +50,8 @@ export function createSSEConnection(
         eventSource.close()
         return
       }
-      console.log('[SSE] Message:', parsed.type, String(parsed.data || '').slice(0, 80))
       callbacks.onMessage({ ...parsed, raw: event.data })
     } catch {
-      console.log('[SSE] Raw message:', event.data.slice(0, 100))
       callbacks.onMessage({ raw: event.data })
     }
   }
@@ -83,20 +78,17 @@ export function createPostSSEConnection(
   const token = localStorage.getItem('codefreex_token')
   const fullUrl = `/api${url}`
 
-  console.log('[SSE-POST] Connecting to:', fullUrl)
 
   // 解析单个 SSE 帧，返回 true 表示流应终止
   function processFrame(raw: string): boolean | undefined {
     if (!raw.trim()) return undefined
     if (raw === '[DONE]') {
-      console.log('[SSE-POST] Received [DONE]')
       callbacks.onDone()
       return true
     }
     try {
       const parsed = JSON.parse(raw) as SSEMessageEvent
       if (parsed.type === 'done') {
-        console.log('[SSE-POST] Received done event')
         callbacks.onDone()
         return true
       }
@@ -105,14 +97,12 @@ export function createPostSSEConnection(
         callbacks.onError(parsed.data)
         return true
       }
-      console.log('[SSE-POST] Message:', parsed.type, String(parsed.data || '').slice(0, 80))
       callbacks.onMessage({ ...parsed, raw })
       // 对节点事件返回类型标记，用于外层加延迟
       if (parsed.type === 'tool_request' || parsed.type === 'tool_executed') {
         return 'delay' as unknown as boolean
       }
     } catch {
-      console.log('[SSE-POST] Raw message:', raw.slice(0, 100))
       callbacks.onMessage({ raw })
     }
     return false
@@ -222,19 +212,16 @@ export function createGetSSEConnection(
   const query = buildQuery(params)
   const fullUrl = query ? `/api${url}?${query}` : `/api${url}`
 
-  console.log('[SSE-GET] Connecting to:', fullUrl)
 
   function processFrame(raw: string): boolean | undefined {
     if (!raw.trim()) return undefined
     if (raw === '[DONE]') {
-      console.log('[SSE-GET] Received [DONE]')
       callbacks.onDone()
       return true
     }
     try {
       const parsed = JSON.parse(raw) as SSEMessageEvent
       if (parsed.type === 'done') {
-        console.log('[SSE-GET] Received done event')
         callbacks.onDone()
         return true
       }
@@ -243,10 +230,8 @@ export function createGetSSEConnection(
         callbacks.onError(parsed.data)
         return true
       }
-      console.log('[SSE-GET] Message:', parsed.type, String(parsed.data || '').slice(0, 80))
       callbacks.onMessage({ ...parsed, raw })
     } catch {
-      console.log('[SSE-GET] Raw message:', raw.slice(0, 100))
       callbacks.onMessage({ raw })
     }
     return false
@@ -265,7 +250,6 @@ export function createGetSSEConnection(
     signal: controller.signal,
   })
     .then(async (response) => {
-      console.log('[SSE-GET] Response received, status=', response.status, 'contentType=', response.headers.get('content-type'))
       if (!response.ok) {
         if (response.status === 401) {
           localStorage.removeItem('codefreex_token')
@@ -294,25 +278,17 @@ export function createGetSSEConnection(
         return
       }
 
-      console.log('[SSE-GET] Reader obtained, starting to read stream...')
 
       const decoder = new TextDecoder()
       let buffer = ''
-      let chunkCount = 0
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) {
-          console.log('[SSE-GET] Stream ended, total chunks=', chunkCount)
           break
         }
 
-        chunkCount++
         const chunkText = decoder.decode(value, { stream: true })
-        if (chunkCount <= 3) {
-          console.log('[SSE-GET] Chunk #', chunkCount, 'size=', value.byteLength, 'preview=', chunkText.slice(0, 150))
-        }
-
         buffer += chunkText
         const frames = buffer.split('\n\n')
         buffer = frames.pop() || ''
