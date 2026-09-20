@@ -1,6 +1,7 @@
 /**
  * 从流式 Markdown 内容中解析出代码文件
- * 支持格式: ```lang:filepath 或 ```filepath
+ * 支持格式: ````file:filepath（后端协议，四反引号围栏，内容可含三反引号代码块）
+ * 兼容格式: ```lang:filepath 或 ```filepath（旧三反引号围栏）
  */
 
 export interface CodeFile {
@@ -19,9 +20,23 @@ interface FileTreeNode {
   file?: CodeFile
 }
 
+/** 行首反引号运行长度，>=3 视为围栏线 */
+function fenceLength(line: string): number {
+  let n = 0
+  while (n < line.length && line[n] === '`') n++
+  return n
+}
+
 /** 从 code block 的 lang 标记中提取 filepath 和 language */
 function parseLangHint(lang: string): { language: string; filepath: string } | null {
   if (!lang) return null
+
+  // ````file:src/App.vue（文件块协议，语言由扩展名推导）
+  if (/^file:/i.test(lang)) {
+    const filepath = lang.slice(5).trim()
+    const ext = filepath.includes('.') ? filepath.split('.').pop()! : ''
+    return { language: extToLang(ext), filepath }
+  }
 
   // ```html:index.html
   if (lang.includes(':')) {
@@ -67,9 +82,9 @@ export function parseCodeFiles(content: string): CodeFile[] {
   const lines = content.split('\n')
 
   let inCodeBlock = false
+  let currentFenceLen = 0
   let currentLang = ''
   let currentFilepath = ''
-  let currentLangHint = ''
   let codeLines: string[] = []
 
   // 在代码块之前的文本中查找 filepath 提示
@@ -77,12 +92,14 @@ export function parseCodeFiles(content: string): CodeFile[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
+    const ticks = fenceLength(line)
+    const rest = line.slice(ticks).trim()
 
     // 检测代码块开始
-    if (!inCodeBlock && line.startsWith('```')) {
+    if (!inCodeBlock && ticks >= 3) {
       inCodeBlock = true
-      currentLangHint = line.slice(3).trim()
-      const parsed = parseLangHint(currentLangHint)
+      currentFenceLen = ticks
+      const parsed = parseLangHint(rest)
       currentLang = parsed?.language || ''
       currentFilepath = parsed?.filepath || pendingFilepath
       codeLines = []
@@ -90,8 +107,9 @@ export function parseCodeFiles(content: string): CodeFile[] {
       continue
     }
 
-    // 检测代码块结束
-    if (inCodeBlock && line.startsWith('```')) {
+    // 检测代码块结束：围栏长度不小于开始围栏且其后无内容（Markdown 规则），
+    // 四反引号文件块内的三反引号代码块因此不会被误判为结束
+    if (inCodeBlock && ticks >= currentFenceLen && rest === '') {
       inCodeBlock = false
       const fileContent = codeLines.join('\n')
 
@@ -112,6 +130,7 @@ export function parseCodeFiles(content: string): CodeFile[] {
         })
       }
 
+      currentFenceLen = 0
       currentLang = ''
       currentFilepath = ''
       codeLines = []
